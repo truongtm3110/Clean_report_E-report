@@ -159,7 +159,9 @@ def create_category_dict(hierarchy):
                     category_dict[category][lv1_name][lv2_name][lv3_name] = {}
     return category_dict
 
+
 category_dict = create_category_dict(hierarchy)
+
 
 def tag_data(row, category_dict):
     name = row['name']
