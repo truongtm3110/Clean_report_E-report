@@ -193,5 +193,6 @@ def tag_data(row, category_dict):
 tqdm.pandas()
 df[['cate_new', 'cat1', 'cat2', 'cat3']] = df.progress_apply(lambda row: tag_data(row, category_dict), axis=1)
 
+
 output_path = r"D:\TUAN\OneDrive - Turry\Metric_T\e-report\data_eReport_map_2907_3.xlsx"
 helper.helper_eReport.df_to_excel(df, output_path, index=False)
