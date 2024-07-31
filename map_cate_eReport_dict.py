@@ -1,13 +1,12 @@
 import pandas as pd
-import helper.helper_eReport
+from collections import Counter
+from tqdm import tqdm
 
 path = r"D:\TUAN\OneDrive - Turry\Metric_T\e-report\data_eReport_map_cate_2907.xlsx"
-
 df = pd.read_excel(path, sheet_name="Sheet1")
 dict_ = df.to_dict(orient='records')
 
 lst_dict_remake = []
-
 for pro in dict_:
     name = pro["name"]
     cate = pro["category_name"]
@@ -40,13 +39,11 @@ for pro in dict_:
             "cate": cate
         })
 
-
 lst_cate = set(d['cate'] for d in lst_dict_remake)
-
-
 dict_cate_lv1 = {cate: [] for cate in lst_cate}
 dict_cate_lv2 = {cate: [] for cate in lst_cate}
 dict_cate_lv3 = {cate: [] for cate in lst_cate}
+dict_cate_lv4 = {cate: [] for cate in lst_cate}
 
 for pro in lst_dict_remake:
     name = pro['name']
@@ -55,140 +52,146 @@ for pro in lst_dict_remake:
     cat1 = " ".join(name.split(" ")[:1])
     cat2 = " ".join(name.split(" ")[:2])
     cat3 = " ".join(name.split(" ")[:3])
+    cat4 = " ".join(name.split(" ")[:4])
 
-    # Thêm vào các dict
     if cate in dict_cate_lv1:
         dict_cate_lv1[cate].append(cat1)
         dict_cate_lv2[cate].append(cat2)
         dict_cate_lv3[cate].append(cat3)
+        dict_cate_lv4[cate].append(cat4)
 
+def count_freq(lst):
+    return Counter(lst)
 
-from collections import Counter
-def get_dict(lst_input: list, num: int):
-    lst_cate = Counter(lst_input)
-    dict_cate_greater_than_num = {k: v for k, v in lst_cate.items() if v > num}
-    return dict_cate_greater_than_num
+cat1 = {cate: count_freq(names) for cate, names in dict_cate_lv1.items()}
+cat2 = {cate: count_freq(names) for cate, names in dict_cate_lv2.items()}
+cat3 = {cate: count_freq(names) for cate, names in dict_cate_lv3.items()}
+cat4 = {cate: count_freq(names) for cate, names in dict_cate_lv4.items()}
 
-lst_output = []
+def build_directory_tree(cat1, cat2, cat3, cat4):
+    hierarchy = []
+    for cate, lv1_counter in cat1.items():
+        lv1_list = []
+        for lv1, count1 in lv1_counter.items():
+            if count1 < 50:
+                continue
+            lv2_list = []
+            for lv2, count2 in cat2[cate].items():
+                if not lv2.startswith(lv1) or count2 < 20:
+                    continue
+                lv3_list = []
+                for lv3, count3 in cat3[cate].items():
+                    if not lv3.startswith(lv2) or count3 < 6:
+                        continue
+                    lv4_list = []
+                    for lv4, count4 in cat4[cate].items():
+                        if not lv4.startswith(lv3) or count4 < 3:
+                            continue
 
-for cate in lst_cate:
-    dict_lv1 = get_dict(dict_cate_lv1[cate], 50)
-    dict_lv2 = get_dict(dict_cate_lv2[cate], 20)
-    dict_lv3 = get_dict(dict_cate_lv3[cate], 5)
-
-    for lv1_name, lv1_volume in dict_lv1.items():
-        lst_children_lv2 = []
-
-        for lv2_name, lv2_volume in dict_lv2.items():
-            if lv2_name.startswith(f"{lv1_name} "):
-                lst_children_lv3 = []
-                lv2_total_volume = lv2_volume
-                for lv3_name, lv3_volume in dict_lv3.items():
-                    if lv3_name.startswith(f"{lv2_name} "):
-
-                        if lv3_volume > 0.8 * lv2_volume:
-                            print(lv2_name, lv2_volume,lv3_name, lv3_volume)
-                            # Nếu volume của lv3 lớn hơn 80% volume của lv2, chuyển lv3 lên lv2
-                            lst_children_lv2.append({
-                                "name_report": lv3_name,
-                                "volume_lv2": lv3_volume,
-                                "level": 2
-                            })
+                        if count4 >= 0.8 * count3:
+                            print(f"Thay thế cate {lv4} - {count4} cho {lv3} - {count3}")
+                            lv3 = lv4
+                            count3 = count4
                         else:
-                            lst_children_lv3.append({
-                                "name_report": lv3_name,
-                                "volume_lv3": lv3_volume,
-                                "level": 3
+                            lv4_list.append({
+                                'name_report': lv4,
+                                'volume_lv4': count4,
+                                'level': 4
                             })
-                            # lv2_total_volume += lv3_volume
-                            d_lv2 = {
-                                "name_report": lv2_name,
-                                "volume_lv2": lv2_total_volume,
-                                "level": 2,
-                                "children": lst_children_lv3
-                            }
-                            lst_children_lv2.append(d_lv2)
 
-                # if lst_children_lv3:
-                #     d_lv2 = {
-                #         "name_report": lv2_name,
-                #         "volume_lv2": lv2_total_volume,
-                #         "level": 2,
-                #         "children": lst_children_lv3
-                #     }
-                #     lst_children_lv2.append(d_lv2)
+                    if count3 >= 0.8 * count2:
+                        print(f"Thay thế cate {lv3} - {count3} cho {lv2} - {count2}")
+                        lv2 = lv3
+                        count2 = count3
+                        lv3_list = lv4_list
+                    else:
+                        lv3_list.append({
+                            'name_report': lv3,
+                            'volume_lv3': count3,
+                            'level': 3,
+                            'children': lv4_list
+                        })
 
-        if lst_children_lv2 or lv1_volume>0:
-            d_lv1 = {
-                "name_catel_lv1": cate,
-                "name_cate_edited": lv1_name,
-                "volume": lv1_volume,
-                "level": 1,
-                "children": lst_children_lv2
-            }
-            lst_output.append(d_lv1)
+                if count2 >= 0.8 * count1:
+                    print(f"Thay thế cate {lv2} - {count2} cho {lv1} - {count1}")
+                    lv1 = lv2
+                    count1 = count2
+                    lv2_list = lv3_list
+                else:
+                    lv2_list.append({
+                        'name_report': lv2,
+                        'volume_lv2': count2,
+                        'level': 2,
+                        'children': lv3_list
+                    })
+            lv1_list.append({
+                'name_catel_lv1': cate,
+                'name_cate_edited': lv1,
+                'volume': count1,
+                'level': 1,
+                'children': lv2_list
+            })
+        hierarchy.append({
+            'category': cate,
+            'children': lv1_list
+        })
+    return hierarchy
+
+hierarchy = build_directory_tree(cat1, cat2, cat3, cat4)
+
+def create_category_dict(hierarchy):
+    category_dict = {}
+
+    for cate in hierarchy:
+        category = cate['category']
+        category_dict[category] = {}
+
+        for lv1 in cate['children']:
+            lv1_name = lv1['name_cate_edited']
+            category_dict[category][lv1_name] = {}
+
+            for lv2 in lv1.get('children', []):
+                lv2_name = lv2['name_report']
+                category_dict[category][lv1_name][lv2_name] = {}
+
+                for lv3 in lv2.get('children', []):
+                    lv3_name = lv3['name_report']
+                    category_dict[category][lv1_name][lv2_name][lv3_name] = {}
+    return category_dict
 
 
-lst_output_sorted = sorted(lst_output, key=lambda x: (x['name_cate_edited']))
+category_dict = create_category_dict(hierarchy)
 
-for lv1 in lst_output_sorted:
-    if 'children' in lv1:
-        lv1['children'] = sorted(lv1['children'], key=lambda x: (x['name_report']))
 
-print("Ca te go rí:",lst_output_sorted)
-
-result = {}
-
-for item in lst_output_sorted:
-    name_cate_edited = item['name_cate_edited']
-    if name_cate_edited not in result:
-        result[name_cate_edited] = {}
-
-    for child_lv2 in item['children']:
-        name_report_lv2 = child_lv2['name_report']
-        if name_report_lv2 not in result[name_cate_edited]:
-            result[name_cate_edited][name_report_lv2] = set()
-
-        for child_lv3 in child_lv2.get('children', []):
-            name_report_lv3 = child_lv3['name_report']
-            result[name_cate_edited][name_report_lv2].add(name_report_lv3)
-
-def check_number(s):
-    for char in s:
-        if char.isdigit():
-            return True
-    return False
-
-def find_cate(name, dict_cate):
+def tag_data(row, category_dict):
+    name = row['name']
     name_spl = name.split()
-    if check_number(name_spl[0]):
+    if helper.helper_eReport.check_number_in_word(name_spl[0]):
         name = " ".join(name_spl[1:])
 
-    for lv1_name, lv2_dict in dict_cate.items():
-        if isinstance(lv2_dict, dict):
-            for lv2_name, lv3_set in lv2_dict.items():
-                if isinstance(lv3_set, set):
-                    for lv3_name in lv3_set:
-                        if name.startswith(f"{lv3_name} ") or name == lv3_name:
-                            return lv1_name, lv2_name, lv3_name
+    for category, lv1_dict in category_dict.items():
+        for lv1_name, lv2_dict in lv1_dict.items():
+            for lv2_name, lv3_dict in lv2_dict.items():
+                for lv3_name in lv3_dict.keys():
+                    if name.startswith(lv3_name):
+                        return pd.Series([category, lv1_name, lv2_name, lv3_name])
 
-    for lv1_name, lv2_dict in dict_cate.items():
-        if isinstance(lv2_dict, dict):
-            for lv2_name in lv2_dict:
-                if name.startswith(f"{lv2_name} ") or name == lv2_name:
-                    return lv1_name, lv2_name, None
+    for category, lv1_dict in category_dict.items():
+        for lv1_name, lv2_dict in lv1_dict.items():
+            for lv2_name, lv3_dict in lv2_dict.items():
+                if name.startswith(lv2_name):
+                    return pd.Series([category, lv1_name, lv2_name, ''])
 
-    for lv1_name in dict_cate:
-        if name.startswith(f"{lv1_name} ") or name == lv1_name:
-            return lv1_name, None, None
+    for category, lv1_dict in category_dict.items():
+        for lv1_name, lv2_dict in lv1_dict.items():
+            if name.startswith(lv1_name):
+                return pd.Series([category, lv1_name, '', ''])
 
-    return None, None, None
 
-for idx, row in df.iterrows():
-    lv1_name, lv2_name, lv3_name = find_cate(row['name'], result)
-    df.at[idx, 'cat1_name'] = lv1_name
-    df.at[idx, 'cat2_name'] = lv2_name
-    df.at[idx, 'cat3_name'] = lv3_name
+    return pd.Series(['', '', '', ''])
+
+tqdm.pandas()
+df[['cate_new', 'cat1', 'cat2', 'cat3']] = df.progress_apply(lambda row: tag_data(row, category_dict), axis=1)
 
 output_path = r"D:\TUAN\OneDrive - Turry\Metric_T\e-report\data_eReport_map_2907_3.xlsx"
-helper.helper_eReport.df_to_excel(df,output_path, index=False)
+helper.helper_eReport.df_to_excel(df, output_path, index=False)
