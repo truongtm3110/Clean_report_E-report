@@ -145,8 +145,14 @@ def load_query_dataframe(file_path: str, sheet_name: str = None) -> pd.DataFrame
 async def fetch_data_keyword(row):
     # async for session_metric in get_async_session_metric():
     lst_keyword = row['Từ khóa'].split(',') if isinstance(row['Từ khóa'], str) else []
-    lst_exclude_keyword = row['Từ khóa loại trừ'] if not math.isnan(row['Từ khóa loại trừ']) else []
-    lst_keyword_required = row['Từ khóa cộng'] if not math.isnan(row['Từ khóa cộng']) else []
+    lst_exclude_keyword = []
+    if type(row['Từ khóa loại trừ']) is str:
+        lst_exclude_keyword = row['Từ khóa loại trừ'].split(',')
+
+    lst_keyword_required = []
+    if type(row['Từ khóa cộng']) is str:
+        lst_keyword_required = row['Từ khóa cộng'].split(',')
+
     is_smart_queries = True if row['Chế độ tìm'] == 'Tìm thông minh' else False
     price_min = row['Giá min'] if not math.isnan(row['Giá min']) else None
     price_max = row['Giá max'] if not math.isnan(row['Giá max']) else None
