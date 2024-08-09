@@ -1,0 +1,25 @@
+syntax = "proto3";
+
+message MapFieldEntry{
+  string key = 1;
+  string value = 2;
+}
+
+message QueueRequestBodyMessage {
+  string full_url = 1;
+  string method = 2;
+  repeated MapFieldEntry headers = 3;
+  map<string, string> cookies = 4;
+  bytes body_bytes = 5;
+  int32 timeout = 6;
+}
+
+message QueueResponseDataMessage {
+  bool is_error = 1;
+  int32 status_code = 2;
+  repeated MapFieldEntry headers = 3;
+  map<string, string> cookies = 4;
+  bytes body_bytes = 5;
+  string worker_name = 6;
+  string worker_mac = 7;
+}
