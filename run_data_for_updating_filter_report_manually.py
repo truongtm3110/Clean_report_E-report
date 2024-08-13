@@ -492,7 +492,7 @@ async def run():
             if category.level != 1:
                 continue
             ratio_revenue = round(category.ratio_revenue * 100, 2)
-            tiktok_category_str += f"{category.parent_name}/{category.name} - {ratio_revenue}%\n"
+            tiktok_category_str += f"{category.name} - {ratio_revenue}%\n"
         tiktok_category_str = tiktok_category_str[:-1]
 
         # bee_category_str = ''
