@@ -430,10 +430,10 @@ async def run():
 
         key_filter_report = text_to_hash_md5(filter_as_str)
         key_response_report = row['Key']
-        # print('key', key_filter_report, key_response_report)
-        # if key_filter_report == key_response_report:
-        #     print(f"- IGNORE Bộ lọc không thay đổi, bỏ qua {row['Từ khóa']} \n")
-        #     continue
+        print('key', key_filter_report, key_response_report)
+        if key_filter_report == key_response_report:
+            print(f"- IGNORE Bộ lọc không thay đổi, bỏ qua {row['Từ khóa']} \n")
+            continue
 
         print(f"- START query từ khóa: {row['Từ khóa']} {index + 1}/{len(df)}")
         query_data_num = row['Lần query data']
