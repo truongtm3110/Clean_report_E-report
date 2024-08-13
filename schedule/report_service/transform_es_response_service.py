@@ -1,4 +1,5 @@
 import functools
+import json
 from typing import Union, List
 
 from fastapi import Depends
@@ -11,7 +12,10 @@ from app.service.universal.universal_service import get_platform_by_id, get_url_
 from helper.array_helper import array_to_map
 from helper.datetime_helper import convert_str_to_datetime, get_start_end_of_month
 from helper.elasticsearch_tranform import get_es_value_agg
+from helper.logger_helper import LoggerSimple
 from helper.type_helper import cast_int
+
+logger = LoggerSimple(name=__name__).logger
 
 
 def sort_lst_price_range(lst_price_range: List[rar.PriceRangeStatistic]):
@@ -98,8 +102,9 @@ async def _tranform_aggs(aggs) -> Union[
             gr_quarter = (_quarter_current - _quarter_adjacent) / _quarter_adjacent
 
     revenue_shopee = None
-    revenue_tiki = None
     revenue_lazada = None
+    revenue_tiki = None
+    revenue_tiktok = None
     lst_marketplace = []
     for bucket in aggregations.get('by_marketplace').get('buckets'):
         _revenue = get_es_value_agg(agg=bucket.get('revenue'))
@@ -114,6 +119,8 @@ async def _tranform_aggs(aggs) -> Union[
             revenue_lazada = _revenue
         elif platform_id == 3:
             revenue_tiki = _revenue
+        elif platform_id == 8:
+            revenue_tiktok = _revenue
         marketplace = rar.PlatformStatistic(
             platform_id=platform_id,
             name=platform.get('name') if platform else None,
@@ -137,7 +144,7 @@ async def _tranform_aggs(aggs) -> Union[
         _revenue = get_es_value_agg(agg=bucket.get('revenue'))
         if _category_obj.get('level') == 2:
             _threshold = _revenue / revenue if _revenue and revenue and revenue > 0 else None
-            if _threshold and _threshold >= min_threshold_category:
+            if _threshold and _threshold >= min_threshold_sub_category:
                 lst_bee_category.append(
                     rar.CategoryStatistic(
                         id=bucket.get('key'),
@@ -155,6 +162,10 @@ async def _tranform_aggs(aggs) -> Union[
     lst_shopee_category: List[rar.CategoryStatistic] = []
     lst_lazada_category: List[rar.CategoryStatistic] = []
     lst_tiki_category: List[rar.CategoryStatistic] = []
+    lst_tiktok_category: List[rar.CategoryStatistic] = []
+
+    # print(json.dumps(aggregations.get('category').get('buckets'), ensure_ascii=False))
+
     for bucket in aggregations.get('category').get('buckets'):
         _category_base_id = bucket.get('key')
         _category_obj = map_category_obj.get(_category_base_id)
@@ -169,6 +180,8 @@ async def _tranform_aggs(aggs) -> Union[
             _revenue_total_of_platform = revenue_lazada
         elif _category_base_id.startswith('3__'):
             _revenue_total_of_platform = revenue_tiki
+        elif _category_base_id.startswith('8__'):
+            _revenue_total_of_platform = revenue_tiktok
         elif _category_base_id.startswith('c'):
             _revenue_total_of_platform = revenue
         _threshold = _revenue / _revenue_total_of_platform if _revenue and _revenue_total_of_platform and _revenue_total_of_platform > 0 else None
@@ -181,10 +194,8 @@ async def _tranform_aggs(aggs) -> Union[
             parent_name=_category_obj.get('parent_name'),
             parent_id=_category_obj.get('parent'),
         )
-        # logger.info(f'cat_statistic: {cat_statistic}')
-        # if _category_obj.get('level') == 2 and _category_base_id.startswith('1__'):
-        #     if _threshold and _threshold >= min_threshold_category:
-        #         lst_shopee_category.append(cat_statistic)
+        # if _category_base_id.startswith('8__'):
+        #     logger.info(f'cat_statistic: {cat_statistic}')
         if _category_obj.get('is_leaf') and _threshold and _threshold >= min_threshold_sub_category:
             # if _category_obj.get('is_leaf'):
             if _category_base_id.startswith('1__'):
@@ -193,16 +204,20 @@ async def _tranform_aggs(aggs) -> Union[
                 by_sub_category.lazada.append(cat_statistic)
             elif _category_base_id.startswith('3__'):
                 by_sub_category.tiki.append(cat_statistic)
+            elif _category_base_id.startswith('8__'):
+                by_sub_category.tiktok.append(cat_statistic)
             elif _category_base_id.startswith('c'):
                 by_sub_category.all.append(cat_statistic)
 
-        if _category_obj.get('level') and _threshold and _threshold >= min_threshold_category:
+        if _category_obj.get('level') and _threshold and _threshold >= min_threshold_sub_category:
             if _category_base_id.startswith('1__'):
                 lst_shopee_category.append(cat_statistic)
             elif _category_base_id.startswith('2__'):
                 lst_lazada_category.append(cat_statistic)
             elif _category_base_id.startswith('3__'):
                 lst_tiki_category.append(cat_statistic)
+            elif _category_base_id.startswith('8__'):
+                lst_tiktok_category.append(cat_statistic)
 
         if _category_obj.get('level') and str(
                 _category_obj.get('level')) == '2' and _threshold and _threshold >= min_threshold_category:
@@ -212,11 +227,10 @@ async def _tranform_aggs(aggs) -> Union[
                 by_cat2_category.lazada.append(cat_statistic)
             elif _category_base_id.startswith('3__'):
                 by_cat2_category.tiki.append(cat_statistic)
+            elif _category_base_id.startswith('8__'):
+                by_cat2_category.tiktok.append(cat_statistic)
             elif _category_base_id.startswith('c'):
                 by_cat2_category.all.append(cat_statistic)
-    # logger.info(json.dumps(aggregations, ensure_ascii=False))
-    # logger.info(by_sub_category.json())
-    # logger.info(by_cat2_category.json())
 
     lst_price_range = []
     for bucket in aggregations.get('by_price_range').get('buckets'):
@@ -419,7 +433,8 @@ async def _tranform_aggs(aggs) -> Union[
         lst_bee_category=lst_bee_category,
         lst_shopee_category=lst_shopee_category,
         lst_lazada_category=lst_lazada_category,
-        lst_tiki_category=lst_tiki_category
+        lst_tiki_category=lst_tiki_category,
+        lst_tiktok_category=lst_tiktok_category
     )
     result_analytic_report = rar.ResultAnalyticReport(
         by_overview=rar.ByOverview(

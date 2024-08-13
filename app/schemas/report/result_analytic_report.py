@@ -172,6 +172,7 @@ class ByCategory(SQLModel):
     lst_shopee_category: List[CategoryStatistic] | None = None
     lst_lazada_category: List[CategoryStatistic] | None = None
     lst_tiki_category: List[CategoryStatistic] | None = None
+    lst_tiktok_category: List[CategoryStatistic] | None = None
 
     # lst_bee_category_l0: List[CategoryStatistic] | None = None
     # lst_bee_category_l1: List[CategoryStatistic] | None = None
@@ -190,6 +191,7 @@ class BySubCategory(SQLModel):
     shopee: List[CategoryStatistic] = []
     tiki: List[CategoryStatistic] = []
     lazada: List[CategoryStatistic] = []
+    tiktok: List[CategoryStatistic] = []
     all: List[CategoryStatistic] = []
 
 

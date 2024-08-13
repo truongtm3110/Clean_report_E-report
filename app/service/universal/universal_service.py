@@ -15,6 +15,10 @@ lst_platform = [
         'id': 4,
         'name': 'Sendo'
     },
+    {
+        'id': 8,
+        'name': 'Tiktok'
+    },
 ]
 
 

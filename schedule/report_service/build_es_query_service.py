@@ -108,7 +108,7 @@ async def build_query_es_from_api(filter_report: FilterReport, start_date, end_d
                     "first_field": "rating_count",
                     "second_field": "order_count",
                     "first_rate": 1,
-                    "second_rate": 0.05,
+                    "second_rate": 0.02,
                     "compare_condition": ">",
                     "is_default": True
                 }
