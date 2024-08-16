@@ -466,23 +466,32 @@ async def run():
 
         shopee_category_str = ''
         for category in lst_shopee_category:
-            if category.level == 2 or category.name == 'Chưa phân loại':
+            if category.level == 2:
                 ratio_revenue = round(category.ratio_revenue * 100, 2)
                 shopee_category_str += f"{category.parent_name}/{category.name} - {ratio_revenue}%\n"
+            if category.name == 'Chưa phân loại':
+                ratio_revenue = round(category.ratio_revenue * 100, 2)
+                shopee_category_str += f"{category.name} - {ratio_revenue}%\n"
         shopee_category_str = shopee_category_str[:-1]
 
         lazada_category_str = ''
         for category in lst_lazada_category:
-            if category.level == 2 or category.name == 'Chưa phân loại':
+            if category.level == 2:
                 ratio_revenue = round(category.ratio_revenue * 100, 2)
                 lazada_category_str += f"{category.parent_name}/{category.name} - {ratio_revenue}%\n"
+            if category.name == 'Chưa phân loại':
+                ratio_revenue = round(category.ratio_revenue * 100, 2)
+                lazada_category_str += f"{category.name} - {ratio_revenue}%\n"
         lazada_category_str = lazada_category_str[:-1]
 
         tiki_category_str = ''
         for category in lst_tiki_category:
-            if category.level == 2 or category.name == 'Chưa phân loại':
+            if category.level == 2:
                 ratio_revenue = round(category.ratio_revenue * 100, 2)
                 tiki_category_str += f"{category.parent_name}/{category.name} - {ratio_revenue}%\n"
+            if category.name == 'Chưa phân loại':
+                ratio_revenue = round(category.ratio_revenue * 100, 2)
+                tiki_category_str += f"{category.name} - {ratio_revenue}%\n"
         tiki_category_str = tiki_category_str[:-1]
 
         tiktok_category_str = ''
