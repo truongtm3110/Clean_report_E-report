@@ -2,6 +2,7 @@ import asyncio
 import json
 import math
 import os
+import traceback
 from datetime import datetime
 from typing import AsyncGenerator
 
@@ -312,7 +313,7 @@ async def fetch_data_keyword(row):
     index_name = 'market_current__shopee_vn,market_current__lazada_vn,market_current__tiki_vn,market_current__tiktok_vn'
     es_session = get_es_metric_session(request_timeout=20)
 
-    # print(json.dumps(query_es_default, ensure_ascii=False))
+    print(json.dumps(query_es_default, ensure_ascii=False))
     # step 4: query elasticsearch
     lst_product_revenue_30d_raw, aggs = search_v2(
         es=es_session,
@@ -337,7 +338,7 @@ async def fetch_data_keyword(row):
     # by_brand = result_analytic_report.by_brand.lst_top_brand_revenue
     # by_shop = result_analytic_report.by_shop.lst_top_shop
 
-    top_10_product = lst_product_revenue_30d_raw[:10]
+    top_10_product = lst_product_revenue_30d_raw[:100]
     middle_10_product = lst_product_revenue_30d_raw[
                         len(lst_product_revenue_30d_raw) // 2 - 5: len(lst_product_revenue_30d_raw) // 2 + 5]
     bottom_10_product = lst_product_revenue_30d_raw[-10:]
@@ -405,138 +406,143 @@ def get_categories_from_row(row: Series, platform: str = 'shopee'):
 
 
 async def run():
-    # input_file_path = f'/Users/tienbm/Downloads/Danh sách báo cáo e-report (1).xlsx'
-    input_file_path = f'{ROOT_DIR}/Danh sách báo cáo e-report.xlsx'
+    input_file_path = f'{ROOT_DIR}/top_volume_product.xlsx'
 
     df = load_query_dataframe(input_file_path, 'Sheet1')
 
     for index, row in df.iterrows():
-        start_time = datetime.now()
+        try:
+            start_time = datetime.now()
 
-        filter_columns = [
-            'Từ khóa',
-            'Danh mục Shopee',
-            'Danh mục Lazada',
-            'Danh mục Tiki',
-            'Danh mục Tiktok',
-            'Từ khóa loại trừ',
-            'Từ khóa cộng',
-            'Chế độ tìm',
-            'Giá min',
-            'Giá max',
-        ]
-        filter_as_str = ''
-        for col in filter_columns:
-            filter_as_str += f"{row[col]}"
+            filter_columns = [
+                'Từ khóa',
+                'Danh mục Shopee',
+                'Danh mục Lazada',
+                'Danh mục Tiki',
+                'Danh mục Tiktok',
+                'Từ khóa loại trừ',
+                'Từ khóa cộng',
+                'Chế độ tìm',
+                'Giá min',
+                'Giá max',
+            ]
 
-        key_filter_report = text_to_hash_md5(filter_as_str)
-        key_response_report = row['Key']
-        print('key', key_filter_report, key_response_report)
-        if key_filter_report == key_response_report:
-            print(f"- IGNORE Bộ lọc không thay đổi, bỏ qua {row['Từ khóa']} \n")
-            continue
+            filter_as_str = ''
+            for col in filter_columns:
+                filter_as_str += f"{row[col]}"
 
-        print(f"- START query từ khóa: {row['Từ khóa']} {index + 1}/{len(df)}")
-        query_data_num = row['Lần query data']
-        if math.isnan(query_data_num):
-            query_data_num = 0
-
-        report_response = await fetch_data_keyword(row)
-        by_marketplace = report_response.get('by_marketplace')
-        by_category = report_response.get('by_category')
-        lst_shopee_category = by_category.lst_shopee_category or []
-        lst_lazada_category = by_category.lst_lazada_category or []
-        lst_tiki_category = by_category.lst_tiki_category or []
-        lst_tiktok_category = by_category.lst_tiktok_category or []
-
-        revenue = report_response.get('revenue')
-        sale = report_response.get('sale')
-        product = report_response.get('product')
-        shop = report_response.get('shop')
-        lst_bee_category = report_response.get('lst_bee_category')[:10]
-        top_10_product = report_response.get('top_10_product')
-        middle_10_product = report_response.get('middle_10_product')
-        bottom_10_product = report_response.get('bottom_10_product')
-
-        revenue_by_market_place = ''
-        for item in by_marketplace.lst_marketplace:
-            ratio_revenue = round(item.ratio_revenue * 100, 2)
-            revenue_by_market_place += f"{item.name} - {ratio_revenue}%\n"
-        revenue_by_market_place = revenue_by_market_place[:-1]
-
-        shopee_category_str = ''
-        for category in lst_shopee_category:
-            if category.level == 2:
-                ratio_revenue = round(category.ratio_revenue * 100, 2)
-                shopee_category_str += f"{category.parent_name}/{category.name} - {ratio_revenue}%\n"
-            if category.name == 'Chưa phân loại':
-                ratio_revenue = round(category.ratio_revenue * 100, 2)
-                shopee_category_str += f"{category.name} - {ratio_revenue}%\n"
-        shopee_category_str = shopee_category_str[:-1]
-
-        lazada_category_str = ''
-        for category in lst_lazada_category:
-            if category.level == 2:
-                ratio_revenue = round(category.ratio_revenue * 100, 2)
-                lazada_category_str += f"{category.parent_name}/{category.name} - {ratio_revenue}%\n"
-            if category.name == 'Chưa phân loại':
-                ratio_revenue = round(category.ratio_revenue * 100, 2)
-                lazada_category_str += f"{category.name} - {ratio_revenue}%\n"
-        lazada_category_str = lazada_category_str[:-1]
-
-        tiki_category_str = ''
-        for category in lst_tiki_category:
-            if category.level == 2:
-                ratio_revenue = round(category.ratio_revenue * 100, 2)
-                tiki_category_str += f"{category.parent_name}/{category.name} - {ratio_revenue}%\n"
-            if category.name == 'Chưa phân loại':
-                ratio_revenue = round(category.ratio_revenue * 100, 2)
-                tiki_category_str += f"{category.name} - {ratio_revenue}%\n"
-        tiki_category_str = tiki_category_str[:-1]
-
-        tiktok_category_str = ''
-        for category in lst_tiktok_category:
-            if category.level != 1:
+            key_filter_report = text_to_hash_md5(filter_as_str)
+            key_response_report = row['Key']
+            print('key', key_filter_report, key_response_report)
+            if key_filter_report == key_response_report:
+                print(f"- IGNORE Bộ lọc không thay đổi, bỏ qua {row['Từ khóa']} \n")
                 continue
-            ratio_revenue = round(category.ratio_revenue * 100, 2)
-            tiktok_category_str += f"{category.name} - {ratio_revenue}%\n"
-        tiktok_category_str = tiktok_category_str[:-1]
 
-        # bee_category_str = ''
-        # for category in lst_bee_category:
-        #     ratio_revenue = round(category.ratio_revenue * 100, 2)
-        #     bee_category_str += f"{category.parent_name}/{category.name} - {ratio_revenue}%\n"
-        # bee_category_str = bee_category_str[:-1]
+            print(f"- START query từ khóa: {row['Từ khóa']} {index + 1}/{len(df)}")
+            query_data_num = row['Lần query data']
+            if math.isnan(query_data_num):
+                query_data_num = 0
 
-        row['Lần query data'] = query_data_num + 1
-        row['Key'] = key_filter_report
-        row['Doanh số từng sàn'] = revenue_by_market_place
-        row['Doanh số'] = revenue
-        row['Sản lượng'] = sale
-        row['Sản phẩm có lượt bán'] = product
-        row['Số shop'] = shop
-        row['Ngành hàng Shopee'] = shopee_category_str
-        row['Ngành hàng Lazada'] = lazada_category_str
-        row['Ngành hàng Tiki'] = tiki_category_str
-        row['Ngành hàng Tiktok'] = tiktok_category_str
+            report_response = await fetch_data_keyword(row)
+            by_marketplace = report_response.get('by_marketplace')
+            by_category = report_response.get('by_category')
+            lst_shopee_category = by_category.lst_shopee_category or []
+            lst_lazada_category = by_category.lst_lazada_category or []
+            lst_tiki_category = by_category.lst_tiki_category or []
+            lst_tiktok_category = by_category.lst_tiktok_category or []
 
-        # row['Ngành hàng'] = bee_category_str
+            revenue = report_response.get('revenue')
+            sale = report_response.get('sale')
+            product = report_response.get('product')
+            shop = report_response.get('shop')
+            lst_bee_category = report_response.get('lst_bee_category')[:10]
+            top_10_product = report_response.get('top_10_product')
+            middle_10_product = report_response.get('middle_10_product')
+            bottom_10_product = report_response.get('bottom_10_product')
 
-        lst_product_name_str = ''
-        for product in top_10_product:
-            lst_product_name_str += f"{product.get('product_name')}\n"
-        for product in middle_10_product:
-            lst_product_name_str += f"{product.get('product_name')}\n"
-        for product in bottom_10_product:
-            lst_product_name_str += f"{product.get('product_name')}\n"
+            revenue_by_market_place = ''
+            for item in by_marketplace.lst_marketplace:
+                ratio_revenue = round(item.ratio_revenue * 100, 2)
+                revenue_by_market_place += f"{item.name} - {ratio_revenue}%\n"
+            revenue_by_market_place = revenue_by_market_place[:-1]
 
-        row['Product name'] = lst_product_name_str[:-1]
+            shopee_category_str = ''
+            for category in lst_shopee_category:
+                if category.level == 2:
+                    ratio_revenue = round(category.ratio_revenue * 100, 2)
+                    shopee_category_str += f"{category.parent_name}/{category.name} - {ratio_revenue}%\n"
+                if category.name == 'Chưa phân loại':
+                    ratio_revenue = round(category.ratio_revenue * 100, 2)
+                    shopee_category_str += f"{category.name} - {ratio_revenue}%\n"
+            shopee_category_str = shopee_category_str[:-1]
 
-        df.loc[index] = row
+            lazada_category_str = ''
+            for category in lst_lazada_category:
+                if category.level == 2:
+                    ratio_revenue = round(category.ratio_revenue * 100, 2)
+                    lazada_category_str += f"{category.parent_name}/{category.name} - {ratio_revenue}%\n"
+                if category.name == 'Chưa phân loại':
+                    ratio_revenue = round(category.ratio_revenue * 100, 2)
+                    lazada_category_str += f"{category.name} - {ratio_revenue}%\n"
+            lazada_category_str = lazada_category_str[:-1]
 
-        df.to_excel(input_file_path, index=False)
+            tiki_category_str = ''
+            for category in lst_tiki_category:
+                if category.level == 2:
+                    ratio_revenue = round(category.ratio_revenue * 100, 2)
+                    tiki_category_str += f"{category.parent_name}/{category.name} - {ratio_revenue}%\n"
+                if category.name == 'Chưa phân loại':
+                    ratio_revenue = round(category.ratio_revenue * 100, 2)
+                    tiki_category_str += f"{category.name} - {ratio_revenue}%\n"
+            tiki_category_str = tiki_category_str[:-1]
 
-        print(f"DONE {index + 1}/{len(df)} trong {datetime.now() - start_time} \n")
+            tiktok_category_str = ''
+            for category in lst_tiktok_category:
+                if category.level != 1:
+                    continue
+                ratio_revenue = round(category.ratio_revenue * 100, 2)
+                tiktok_category_str += f"{category.name} - {ratio_revenue}%\n"
+            tiktok_category_str = tiktok_category_str[:-1]
+
+            # bee_category_str = ''
+            # for category in lst_bee_category:
+            #     ratio_revenue = round(category.ratio_revenue * 100, 2)
+            #     bee_category_str += f"{category.parent_name}/{category.name} - {ratio_revenue}%\n"
+            # bee_category_str = bee_category_str[:-1]
+
+            row['Lần query data'] = query_data_num + 1
+            row['Key'] = key_filter_report
+            row['Doanh số từng sàn'] = revenue_by_market_place
+            row['Doanh số'] = revenue
+            row['Sản lượng'] = sale
+            row['Sản phẩm có lượt bán'] = product
+            row['Số shop'] = shop
+            row['Ngành hàng Shopee'] = shopee_category_str
+            row['Ngành hàng Lazada'] = lazada_category_str
+            row['Ngành hàng Tiki'] = tiki_category_str
+            row['Ngành hàng Tiktok'] = tiktok_category_str
+
+            # row['Ngành hàng'] = bee_category_str
+
+            lst_product_name_str = ''
+            for product in top_10_product:
+                lst_product_name_str += f"{product.get('product_name')}\n"
+            # for product in middle_10_product:
+            #     lst_product_name_str += f"{product.get('product_name')}\n"
+            # for product in bottom_10_product:
+            #     lst_product_name_str += f"{product.get('product_name')}\n"
+
+            row['Product name'] = lst_product_name_str[:-1]
+
+            df.loc[index] = row
+
+            df.to_excel(input_file_path, index=False)
+
+            print(f"DONE {index + 1}/{len(df)} trong {datetime.now() - start_time} \n")
+
+        except:
+
+            traceback.print_exc()
 
 
 if __name__ == '__main__':
