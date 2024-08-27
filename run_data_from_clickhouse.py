@@ -16,8 +16,7 @@ from helper.logger_helper import LoggerSimple
 from helper.text_hash_helper import text_to_hash_md5
 from schedule.report_service.build_es_query_service import build_query_es_from_api, get_aggs_runtime_mapping_es, \
     FilterReport, Range
-from schedule.report_service.transform_es_response_service import _tranform_aggs
-import clickhouse_connect
+import concurrent.futures
 
 clickhouse_config = {
     'Host': 'sv7.beecost.net',
@@ -31,23 +30,23 @@ logger = LoggerSimple(name=__name__).logger
 ROOT_DIR = os.path.dirname(os.path.abspath(__file__))
 
 
-def format_text_currency(price, min_value=1_000_000):
+def format_text_currency(price, min_value=1_000):
     if not price:
         return price
 
     price = float(price)
 
     def round_and_format(price, divisor, unit):
-        rounded_price = '{:,.0f}'.format(round(price / divisor, 0))
+        rounded_price = '{:,.0f}'.format(round(price / divisor, 2))
         return f"{rounded_price}{unit}"
 
-    if price % 1_000_000_000 != 0:
+    if price > 1_000_000_000 and price % 1_000_000_000 != 0:
         return round_and_format(price, 1_000_000_000, " tỷ")
 
-    if price % 1_000_000 != 0 and price >= min_value:
+    if price > 1_000_000 and price % 1_000_000 != 0 and price >= min_value:
         return round_and_format(price, 1_000_000, " triệu")
 
-    if price % 1000 != 0 and price >= min_value:
+    if price > 1000 and price % 1000 != 0 and price >= min_value:
         return round_and_format(price, 1000, " nghìn")
 
     return round_and_format(price, 1, "")
@@ -64,14 +63,9 @@ def build_clickhouse_query(filer_report, start_date, end_date, size_product):
     start_date = datetime.strptime(start_date, '%Y%m%d').strftime('%Y-%m-%d')
     end_date = datetime.strptime(end_date, '%Y%m%d').strftime('%Y-%m-%d')
     where_query = f""" 
-        FROM (SELECT *,
-             arraySum(x -> if(x.1 between '{start_date}' and '{end_date}', x.3, 0),
-                      order_revenue_arr) AS revenue_custom,
-             arraySum(x -> if(x.1 between '{start_date}' and '{end_date}', x.2, 0),
-                      order_revenue_arr) AS order_custom
-        FROM analytics.products) p
+        FROM analytics.products_on_memory p
         WHERE platform_id IN (1, 2, 3, 8) 
-            AND order_custom >= 1 
+            AND order_count_180d >= 1 
             AND (rating_count * 1.0 > order_count * 0.03)
             AND NOT (product_name ILIKE '%[QT_Pampers]%' OR product_name ILIKE '%GIFT_Nước%' OR
                product_name ILIKE '%GIFT_Tinh%' OR product_name ILIKE '%GIFT_%' OR product_name ILIKE '%GIFT_Gel%' OR
@@ -158,24 +152,24 @@ def build_clickhouse_query(filer_report, start_date, end_date, size_product):
     if price_range:
         where_query += f" AND price >= {price_range.begin} AND price <= {price_range.end}"
 
-    select_lst_product_query = f"SELECT p.product_base_id, p.product_name, p.revenue_custom, p.order_custom" \
+    select_lst_product_query = f"SELECT p.product_base_id, p.product_name, p.order_revenue_180d, p.order_count_180d" \
                                f" {where_query}" \
-                               f" ORDER BY revenue_custom DESC LIMIT {size_product}"
+                               f" ORDER BY order_revenue_180d DESC LIMIT {size_product}"
     aggs_query = f"""
-        SELECT sum(revenue_custom)                                             AS revenue_total,
-               sum(order_custom)                                               AS order_total,
+        SELECT sum(order_revenue_180d)                                             AS revenue_total,
+               sum(order_count_180d)                                               AS order_total,
                count(distinct product_base_id)                                 AS product_total,
                count(distinct shop_base_id)                                    AS shop_total,
-               topKWeighted(30, 3, 'counts')(platform, revenue_custom)         AS revenue_by_platform,
-               topKWeighted(30, 3, 'counts')(categories__id_1, revenue_custom) AS revenue_by_categories__id_1,
-               topKWeighted(30, 3, 'counts')(categories__id_2, revenue_custom) AS revenue_by_categories__id_2
+               topKWeighted(30, 3, 'counts')(platform, order_revenue_180d)         AS revenue_by_platform,
+               topKWeighted(30, 3, 'counts')(categories__id_1, order_revenue_180d) AS revenue_by_categories__id_1,
+               topKWeighted(30, 3, 'counts')(categories__id_2, order_revenue_180d) AS revenue_by_categories__id_2
         {where_query}
     """
 
     return select_lst_product_query, aggs_query
 
 
-async def fetch_data_keyword(row, client):
+def fetch_data_keyword(row, client):
     # async for session_metric in get_async_session_metric():
     lst_keyword = row['Từ khóa'].split(',') if isinstance(row['Từ khóa'], str) else []
     lst_exclude_keyword = []
@@ -221,18 +215,18 @@ async def fetch_data_keyword(row, client):
         filter_report,
         '20230701',
         '20240630',
-        size_product=1000
+        size_product=500
     )
 
     # lst_product, aggs = await asyncio.gather(
     #     client.query(lst_product_query),
     #     client.query(aggs_query)
     # )
-    lst_product = await client.query(lst_product_query)
-    aggs = await client.query(aggs_query)
+    lst_product = client.query(lst_product_query)
+    aggs = client.query(aggs_query)
 
     # print(lst_product.result_rows)
-    print(aggs.result_rows)
+    # print(aggs.result_rows)
 
     revenue_total = aggs.result_rows[0][0]
     order_total = aggs.result_rows[0][1]
@@ -283,10 +277,12 @@ async def fetch_data_keyword(row, client):
         revenue = cate.get('count')
         category = map_category_obj.get(category_id)
         ratio_revenue = round((revenue / shopee_revenue) * 100, 2)
+        if ratio_revenue < 1:
+            continue
         if category.get('level') == 2:
-            shopee_category_str += f"{category.get('parent_name')}/{category.get('name')} - {format_text_currency(revenue)} - {ratio_revenue}%\n"
-        if category.get('name') == 'Chưa phân loại':
-            shopee_category_str += f"{category.get('name')} - {format_text_currency(revenue)} - {ratio_revenue}%\n"
+            shopee_category_str += f"{category.get('parent_name')}/{category.get('label')} - {format_text_currency(revenue)} - {ratio_revenue}%\n"
+        if category.get('label') == 'Chưa phân loại':
+            shopee_category_str += f"{category.get('label')} - {format_text_currency(revenue)} - {ratio_revenue}%\n"
     shopee_category_str = shopee_category_str[:-1]
 
     for cate in lst_lazada_category:
@@ -294,10 +290,12 @@ async def fetch_data_keyword(row, client):
         revenue = cate.get('count')
         category = map_category_obj.get(category_id)
         ratio_revenue = round((revenue / lazada_revenue) * 100, 2)
+        if ratio_revenue < 1:
+            continue
         if category.get('level') == 2:
-            lazada_category_str += f"{category.get('parent_name')}/{category.get('name')} - {format_text_currency(revenue)} - {ratio_revenue}%\n"
-        if category.get('name') == 'Chưa phân loại':
-            lazada_category_str += f"{category.get('name')} - {format_text_currency(revenue)} - {ratio_revenue}%\n"
+            lazada_category_str += f"{category.get('parent_name')}/{category.get('label')} - {format_text_currency(revenue)} - {ratio_revenue}%\n"
+        if category.get('label') == 'Chưa phân loại':
+            lazada_category_str += f"{category.get('label')} - {format_text_currency(revenue)} - {ratio_revenue}%\n"
     lazada_category_str = lazada_category_str[:-1]
 
     for cate in lst_tiki_category:
@@ -305,10 +303,12 @@ async def fetch_data_keyword(row, client):
         revenue = cate.get('count')
         category = map_category_obj.get(category_id)
         ratio_revenue = round((revenue / tiki_revenue) * 100, 2)
+        if ratio_revenue < 1:
+            continue
         if category.get('level') == 2:
-            tiki_category_str += f"{category.get('parent_name')}/{category.get('name')} - {format_text_currency(revenue)} - {ratio_revenue}%\n"
-        if category.get('name') == 'Chưa phân loại':
-            tiki_category_str += f"{category.get('name')} - {format_text_currency(revenue)} - {ratio_revenue}%\n"
+            tiki_category_str += f"{category.get('parent_name')}/{category.get('label')} - {format_text_currency(revenue)} - {ratio_revenue}%\n"
+        if category.get('label') == 'Chưa phân loại':
+            tiki_category_str += f"{category.get('label')} - {format_text_currency(revenue)} - {ratio_revenue}%\n"
     tiki_category_str = tiki_category_str[:-1]
 
     for cate in lst_tiktok_category:
@@ -319,7 +319,7 @@ async def fetch_data_keyword(row, client):
 
         revenue = cate.get('count')
         ratio_revenue = round((revenue / tiktok_revenue) * 100, 2)
-        tiktok_category_str += f"{category.get('name')} - {format_text_currency(revenue)} - {ratio_revenue}%\n"
+        tiktok_category_str += f"{category.get('label')} - {format_text_currency(revenue)} - {ratio_revenue}%\n"
     tiktok_category_str = tiktok_category_str[:-1]
 
     return revenue_total, order_total, product_total, shop_total, revenue_by_market_place, \
@@ -371,8 +371,10 @@ def get_categories_from_row(row: Series, platform: str = 'shopee'):
         return lst_category
 
 
-async def run_by_row(index, row, client):
-    client = await clickhouse_connect.get_async_client(
+def run_by_row(index, row, client):
+    import clickhouse_connect
+
+    client = clickhouse_connect.get_client(
         host=clickhouse_config['Host'],
         port=clickhouse_config['Port'],
         user=clickhouse_config['User'],
@@ -398,7 +400,7 @@ async def run_by_row(index, row, client):
 
     key_filter_report = text_to_hash_md5(filter_as_str)
     key_response_report = row['Key']
-    print('key', key_filter_report, key_response_report)
+    # print('key', key_filter_report, key_response_report)
     # if key_filter_report == key_response_report:
     #     print(f"- IGNORE Bộ lọc không thay đổi, bỏ qua {row['Từ khóa']} \n")
     #     continue
@@ -411,7 +413,7 @@ async def run_by_row(index, row, client):
     revenue_total, order_total, product_total, shop_total, \
         revenue_by_market_place, top_10_product, middle_10_product, \
         bottom_10_product, shopee_category_str, lazada_category_str, \
-        tiki_category_str, tiktok_category_str = await fetch_data_keyword(row, client)
+        tiki_category_str, tiktok_category_str = fetch_data_keyword(row, client)
 
     row['Lần query data'] = query_data_num + 1
     row['Key'] = key_filter_report
@@ -421,52 +423,60 @@ async def run_by_row(index, row, client):
     row['Sản phẩm có lượt bán'] = product_total
     row['Số shop'] = shop_total
     row['Ngành hàng Shopee'] = shopee_category_str
+    # print(shopee_category_str)
     row['Ngành hàng Lazada'] = lazada_category_str
+#     print(lazada_category_str)
     row['Ngành hàng Tiki'] = tiki_category_str
+#     print(tiki_category_str)
     row['Ngành hàng Tiktok'] = tiktok_category_str
+#     print(tiktok_category_str)
 
     lst_product_name_str = ''
     for product in top_10_product:
         revenue = product[2]
         order_count = '{:,.0f}'.format(product[3], 0)
-        lst_product_name_str += f"{product[1]} - doanh số:{format_text_currency(revenue)}, sản lượng: {order_count}\n"
+        lst_product_name_str += f"{product[1]}\n"
     for product in middle_10_product:
         revenue = product[2]
         order_count = '{:,.0f}'.format(product[3], 0)
-        lst_product_name_str += f"{product[1]} - doanh số:{format_text_currency(revenue)}, sản lượng: {order_count}\n"
+        lst_product_name_str += f"{product[1]}\n"
     for product in bottom_10_product:
         revenue = product[2]
         order_count = '{:,.0f}'.format(product[3], 0)
-        lst_product_name_str += f"{product[1]} - doanh số:{format_text_currency(revenue)}, sản lượng: {order_count}\n"
+        lst_product_name_str += f"{product[1]}\n"
 
     row['Product name'] = lst_product_name_str[:-1]
-    print(f"- DONE query từ khóa: {row['Từ khóa']} {index + 1} trong {datetime.now() - start_time}")
+    print(f"- DONE query từ khóa: {row['Từ khóa']}, dòng:{index + 1}, trong {datetime.now() - start_time}")
 
     return index, row
 
 
-async def run():
-    # input_file_path = f'/Users/tienbm/Downloads/Danh sách báo cáo e-report (1).xlsx'
+def run():
     input_file_path = f'{ROOT_DIR}/Danh sách báo cáo e-report.xlsx'
-
     df = load_query_dataframe(input_file_path, 'Sheet1')
 
-    batch_size = 10
+    # batch_size = 1
+    batch_size = 5
 
-    for i in range(0, len(df), batch_size):
-        start_time = datetime.now()
-        df_batch = df[i:i + batch_size]
+    with concurrent.futures.ThreadPoolExecutor() as executor:
+        futures = []
+        for i in range(0, len(df), batch_size):
+            start_time = datetime.now()
+            df_batch = df[i:i + batch_size]
 
-        tasks = [run_by_row(index, row, None) for index, row in df_batch.iterrows()]
-        results = await asyncio.gather(*tasks)
+            for index, row in df_batch.iterrows():
+                futures.append(executor.submit(run_by_row, index, row, None))
 
-        for index, row in results:
-            df.loc[index] = row
+            for future in concurrent.futures.as_completed(futures):
+                index, row = future.result()
+                if row is None:
+                    continue
+                df.loc[index] = row
 
-        print(f"Time to process batch {i + 1}-{i + batch_size}: {datetime.now() - start_time}")
+            print(f"Time to process batch {i + 1}-{i + batch_size}: {datetime.now() - start_time}")
 
-    df.to_excel(input_file_path, index=False)
+            df.to_excel(input_file_path, index=False)
 
 
 if __name__ == '__main__':
-    asyncio.run(run())
+    run()
