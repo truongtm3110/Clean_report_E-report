@@ -59,68 +59,22 @@ def load_query_dataframe(file_path: str, sheet_name: str = None) -> pd.DataFrame
         return pd.read_excel(file_path, sheet_name=sheet_name)
 
 
-def build_clickhouse_query(filer_report, start_date, end_date, size_product):
-    start_date = datetime.strptime(start_date, '%Y%m%d').strftime('%Y-%m-%d')
-    end_date = datetime.strptime(end_date, '%Y%m%d').strftime('%Y-%m-%d')
-    where_query = f""" 
-        FROM analytics.products_on_memory p
-        WHERE platform_id IN (1, 2, 3, 8) 
-            AND order_count_180d >= 1 
-            AND (rating_count * 1.0 > order_count * 0.03)
-            AND NOT (product_name ILIKE '%[QT_Pampers]%' OR product_name ILIKE '%GIFT_Nước%' OR
-               product_name ILIKE '%GIFT_Tinh%' OR product_name ILIKE '%GIFT_%' OR product_name ILIKE '%GIFT_Gel%' OR
-               product_name ILIKE '%GIFT_Sữa%' OR product_name ILIKE '%GIFT_TÚI%' OR product_name ILIKE '%GIFT_Combo%' OR
-               product_name ILIKE '%GIFT_Tinh chất (Serum)%' OR product_name ILIKE '%GIFT_[Phiên bản lễ hội 2022] Túi%' OR
-               product_name ILIKE '%GIFT_ Combo%' OR product_name ILIKE '%GIFT_Kem%' OR product_name ILIKE '%Gift_Bộ%' OR
-               product_name ILIKE '%[MKB Gift]%' OR product_name ILIKE '%[QT_Huggies]%' OR
-               product_name ILIKE '%(QT_Huggies)%' OR product_name ILIKE '%không bán%' OR
-               product_name ILIKE '%[HC GIFT]%' OR product_name ILIKE '%[Gift]%' OR product_name ILIKE '%[Quà tặng]%' OR
-               product_name ILIKE '%[Hàng tặng không bán]%' OR product_name ILIKE '%[HB GIFT]%' OR
-               product_name ILIKE '%[Quà tặng không bán]%' OR product_name ILIKE '%quà tặng không bán%')
-           AND product_base_id NOT IN
-              ('1__24957347281__14063555', '1__22222367403__266619909', '1__23722365583__266619909', '1__11141784570__37147137',
-               '1__21482936482__233692311', '1__17651456174__147191228', '1__25106186302__27495839',
-               '1__22978629888__1041184627', '1__20195900981__1041184627', '1__21491369435__1041184627',
-               '1__18293309371__1041184627', '1__23653135954__1041184627', '1__22075364950__1041184627',
-               '1__24958033319__1041184627', '1__21582424436__1041184627', '1__24058608585__1041184627',
-               '1__18682436952__1041184627', '1__22487271251__1041184627', '1__22759580760__1041184627',
-               '1__18783598787__1041184627', '1__22353137296__1041184627', '1__24005630082__1041184627',
-               '1__14399401581__1041184627', '1__21286543196__1041184627', '1__25366405828__1041184627',
-               '1__20595900951__1041184627', '1__12881879616__341418380', '1__22718228347__78546729',
-               '1__20283585269__1041184627', '1__17093392925__948819478', '1__19674370457__948819478',
-               '1__20816632520__37251700', '1__18293673509__1041184627', '1__18981035578__102374043',
-               '1__24501797634__1017203611', '1__15698792132__78546729', '1__22744159326__78546729', '1__19188744016__78546729',
-               '1__22126709725__78546729', '1__22836017144__78546729', '1__18877323592__78546729', '1__22856676638__90366612',
-               '1__23418231110__78546729', '1__21273342308__954659720', '1__23241302273__180651803',
-               '1__22967804703__944545485', '1__21476491960__180651803', '1__22228577909__182053498',
-               '1__23024413633__954659720', '1__23630395242__182053498', '1__22448104536__391379978',
-               '1__18990756057__391379978', '1__17298284924__391379978', '1__15510206761__487013605',
-               '1__19489251460__300458619', '1__10815055198__37251700', '1__23533338149__78546729', '1__22842437672__78546729',
-               '1__23118220623__78546729', '1__23529023038__78546729', '1__22035520048__78546729', '1__16493661986__78546729',
-               '1__23326697557__78546729', '1__13498828558__78546729', '1__19371170617__78546729', '1__21087297107__1041184627',
-               '1__25603574145__1041184627', '1__23053544950__989774266', '1__23570023664__76421217',
-               '1__23640709144__530333613', '1__21249461418__37251700', '1__5649906977__37147137', '1__8054727060__37147137',
-               '1__8933594845__37147137', '1__11221656422__37147137', '1__18935483365__122583961', '1__21448128807__122583961',
-               '1__17595131274__122583961', '1__17349788726__122583961', '1__17073730664__122583961',
-               '1__17462767801__122583961', '1__19416740522__37251700', '1__22731830626__320642539', '1__23616219555__27495839',
-               '1__10590701768__37251700', '1__9739323899__37251700', '1__2343883738__697821129')
-          AND shop_platform_id NOT IN (391379079, 391379978, 521935626, 266485724, 451610579, 1099988375, 400054588, 68410045)
-          AND is_deleted = false
-    """
+def build_clickhouse_query(filer_report):
+    where_query = ""
 
     lst_category_base_id = filer_report.lst_category_base_id
-    if lst_category_base_id:
-        where_query += f" AND ("
-        where_query += f" categories__id_1 IN {tuple(lst_category_base_id)} "
-        where_query += f" OR categories__id_2 IN {tuple(lst_category_base_id)} "
-        where_query += f" OR categories__id_3 IN {tuple(lst_category_base_id)} "
-        where_query += f" OR categories__id_4 IN {tuple(lst_category_base_id)} "
-        where_query += f" OR categories__id_5 IN {tuple(lst_category_base_id)} "
-        where_query += f")"
+    # if lst_category_base_id:
+    #     where_query += f" ("
+    #     where_query += f" categories__id_1 IN {tuple(lst_category_base_id)} "
+    #     where_query += f" OR categories__id_2 IN {tuple(lst_category_base_id)} "
+    #     where_query += f" OR categories__id_3 IN {tuple(lst_category_base_id)} "
+    #     where_query += f" OR categories__id_4 IN {tuple(lst_category_base_id)} "
+    #     where_query += f" OR categories__id_5 IN {tuple(lst_category_base_id)} "
+    #     where_query += f")"
 
     is_split_keyword = filer_report.is_smart_queries
     if filer_report.lst_keyword:
-        where_query += f" AND ("
+        where_query += f" ("
         for keyword in filer_report.lst_keyword:
             where_query += f"("
             if is_split_keyword:
@@ -151,26 +105,10 @@ def build_clickhouse_query(filer_report, start_date, end_date, size_product):
     price_range = filer_report.price_range
     if price_range:
         where_query += f" AND price >= {price_range.begin} AND price <= {price_range.end}"
-
-    select_lst_product_query = f"SELECT p.product_base_id, p.product_name, p.order_revenue_180d, p.order_count_180d" \
-                               f" {where_query}" \
-                               f" ORDER BY order_revenue_180d DESC LIMIT {size_product}"
-    aggs_query = f"""
-        SELECT sum(order_revenue_180d)                                             AS revenue_total,
-               sum(order_count_180d)                                               AS order_total,
-               count(distinct product_base_id)                                 AS product_total,
-               count(distinct shop_base_id)                                    AS shop_total,
-               topKWeighted(30, 3, 'counts')(platform, order_revenue_180d)         AS revenue_by_platform,
-               topKWeighted(30, 3, 'counts')(categories__id_1, order_revenue_180d) AS revenue_by_categories__id_1,
-               topKWeighted(30, 3, 'counts')(categories__id_2, order_revenue_180d) AS revenue_by_categories__id_2
-        {where_query}
-    """
-
-    return select_lst_product_query, aggs_query
+    return where_query
 
 
 def fetch_data_keyword(row, client):
-    # async for session_metric in get_async_session_metric():
     lst_keyword = row['Từ khóa'].split(',') if isinstance(row['Từ khóa'], str) else []
     lst_exclude_keyword = []
     if type(row['Từ khóa loại trừ']) is str:
@@ -211,12 +149,14 @@ def fetch_data_keyword(row, client):
         lst_tiktok_categories=lst_tiktok_categories,
     )
 
-    lst_product_query, aggs_query = build_clickhouse_query(
+    where_query = build_clickhouse_query(
         filter_report,
         '20230701',
         '20240630',
         size_product=500
     )
+
+    return
 
     # lst_product, aggs = await asyncio.gather(
     #     client.query(lst_product_query),
@@ -371,7 +311,142 @@ def get_categories_from_row(row: Series, platform: str = 'shopee'):
         return lst_category
 
 
-def run_by_row(index, row, client):
+def build_multiple_row_data_query(index, df_batch, start_date, end_date):
+    start_time = datetime.now()
+    aggs_query = "SELECT"
+    for idx, row in df_batch.iterrows():
+        filter_columns = [
+            'Từ khóa',
+            'Danh mục Shopee',
+            'Danh mục Lazada',
+            'Danh mục Tiki',
+            'Danh mục Tiktok',
+            'Từ khóa loại trừ',
+            'Từ khóa cộng',
+            'Chế độ tìm',
+            'Giá min',
+            'Giá max',
+        ]
+        filter_as_str = ''
+        for col in filter_columns:
+            filter_as_str += f"{row[col]}"
+
+        lst_keyword = row['Từ khóa'].split(',') if isinstance(row['Từ khóa'], str) else []
+        lst_exclude_keyword = []
+        if type(row['Từ khóa loại trừ']) is str:
+            lst_exclude_keyword = row['Từ khóa loại trừ'].split(',')
+
+        lst_keyword_required = []
+        if type(row['Từ khóa cộng']) is str:
+            lst_keyword_required = row['Từ khóa cộng'].split(',')
+
+        is_smart_queries = True if row['Chế độ tìm'] == 'Tìm thông minh' else False
+        price_min = row['Giá min'] if not math.isnan(row['Giá min']) else None
+        price_max = row['Giá max'] if not math.isnan(row['Giá max']) else None
+
+        lst_shopee_categories = get_categories_from_row(row, 'shopee')
+        lst_lazada_categories = get_categories_from_row(row, 'lazada')
+        lst_tiki_categories = get_categories_from_row(row, 'tiki')
+        lst_tiktok_categories = get_categories_from_row(row, 'tiktok')
+
+        price_range = None
+        if price_min or price_max:
+            price_range = Range(
+                begin=price_min,
+                end=price_max
+            )
+
+        filter_report = FilterReport(
+            lst_platform_id=[1, 2, 3, 8],
+            lst_keyword_exclude=lst_exclude_keyword,
+            lst_keyword_required=lst_keyword_required,
+            lst_keyword=lst_keyword,
+            is_smart_queries=is_smart_queries,
+            lst_category_base_id=lst_shopee_categories + lst_lazada_categories + lst_tiki_categories + lst_tiktok_categories,
+            price_range=price_range,
+            is_remove_fake_sale=True,
+            lst_shopee_categories=lst_shopee_categories,
+            lst_lazada_categories=lst_lazada_categories,
+            lst_tiki_categories=lst_tiki_categories,
+            lst_tiktok_categories=lst_tiktok_categories,
+        )
+
+        where_query = build_clickhouse_query(filter_report)
+        aggs_query += f"""
+            (sumIf(revenue_custom, {where_query}),
+            sumIf(order_custom, {where_query}),
+            countIf(distinct product_base_id, {where_query}),
+            countIf(distinct shop_base_id, {where_query}),
+            topKWeightedIf(30, 3, 'counts')(platform, revenue_custom, {where_query}),
+            topKWeightedIf(30, 3, 'counts')(categories__id_2, revenue_custom, {where_query}),
+            topKWeightedIf(500, 3, 'counts')(product_name, revenue_custom, {where_query})) as report_{idx},"""
+
+    start_date = datetime.strptime(start_date, '%Y%m%d').strftime('%Y-%m-%d')
+    end_date = datetime.strptime(end_date, '%Y%m%d').strftime('%Y-%m-%d')
+    aggs_query = aggs_query[:-1]
+    aggs_query += f"""
+            FROM (
+                SELECT *,
+                    arraySum(x -> if(x.1 between '{start_date}' and '{end_date}', x.3, 0),
+                             order_revenue_arr) AS revenue_custom,
+                    arraySum(x -> if(x.1 between '{start_date}' and '{end_date}', x.2, 0),
+                             order_revenue_arr) AS order_custom
+                FROM analytics.products
+            ) p
+            WHERE platform_id IN (1, 2, 3, 8) 
+                AND order_custom >= 1 
+                AND (rating_count * 1.0 > order_count * 0.03)
+                AND NOT (product_name ILIKE '%[QT_Pampers]%' OR product_name ILIKE '%GIFT_Nước%' OR
+                   product_name ILIKE '%GIFT_Tinh%' OR product_name ILIKE '%GIFT_%' OR product_name ILIKE '%GIFT_Gel%' OR
+                   product_name ILIKE '%GIFT_Sữa%' OR product_name ILIKE '%GIFT_TÚI%' OR product_name ILIKE '%GIFT_Combo%' OR
+                   product_name ILIKE '%GIFT_Tinh chất (Serum)%' OR product_name ILIKE '%GIFT_[Phiên bản lễ hội 2022] Túi%' OR
+                   product_name ILIKE '%GIFT_ Combo%' OR product_name ILIKE '%GIFT_Kem%' OR product_name ILIKE '%Gift_Bộ%' OR
+                   product_name ILIKE '%[MKB Gift]%' OR product_name ILIKE '%[QT_Huggies]%' OR
+                   product_name ILIKE '%(QT_Huggies)%' OR product_name ILIKE '%không bán%' OR
+                   product_name ILIKE '%[HC GIFT]%' OR product_name ILIKE '%[Gift]%' OR product_name ILIKE '%[Quà tặng]%' OR
+                   product_name ILIKE '%[Hàng tặng không bán]%' OR product_name ILIKE '%[HB GIFT]%' OR
+                   product_name ILIKE '%[Quà tặng không bán]%' OR product_name ILIKE '%quà tặng không bán%')
+               AND product_base_id NOT IN
+                  ('1__24957347281__14063555', '1__22222367403__266619909', '1__23722365583__266619909', '1__11141784570__37147137',
+                   '1__21482936482__233692311', '1__17651456174__147191228', '1__25106186302__27495839',
+                   '1__22978629888__1041184627', '1__20195900981__1041184627', '1__21491369435__1041184627',
+                   '1__18293309371__1041184627', '1__23653135954__1041184627', '1__22075364950__1041184627',
+                   '1__24958033319__1041184627', '1__21582424436__1041184627', '1__24058608585__1041184627',
+                   '1__18682436952__1041184627', '1__22487271251__1041184627', '1__22759580760__1041184627',
+                   '1__18783598787__1041184627', '1__22353137296__1041184627', '1__24005630082__1041184627',
+                   '1__14399401581__1041184627', '1__21286543196__1041184627', '1__25366405828__1041184627',
+                   '1__20595900951__1041184627', '1__12881879616__341418380', '1__22718228347__78546729',
+                   '1__20283585269__1041184627', '1__17093392925__948819478', '1__19674370457__948819478',
+                   '1__20816632520__37251700', '1__18293673509__1041184627', '1__18981035578__102374043',
+                   '1__24501797634__1017203611', '1__15698792132__78546729', '1__22744159326__78546729', '1__19188744016__78546729',
+                   '1__22126709725__78546729', '1__22836017144__78546729', '1__18877323592__78546729', '1__22856676638__90366612',
+                   '1__23418231110__78546729', '1__21273342308__954659720', '1__23241302273__180651803',
+                   '1__22967804703__944545485', '1__21476491960__180651803', '1__22228577909__182053498',
+                   '1__23024413633__954659720', '1__23630395242__182053498', '1__22448104536__391379978',
+                   '1__18990756057__391379978', '1__17298284924__391379978', '1__15510206761__487013605',
+                   '1__19489251460__300458619', '1__10815055198__37251700', '1__23533338149__78546729', '1__22842437672__78546729',
+                   '1__23118220623__78546729', '1__23529023038__78546729', '1__22035520048__78546729', '1__16493661986__78546729',
+                   '1__23326697557__78546729', '1__13498828558__78546729', '1__19371170617__78546729', '1__21087297107__1041184627',
+                   '1__25603574145__1041184627', '1__23053544950__989774266', '1__23570023664__76421217',
+                   '1__23640709144__530333613', '1__21249461418__37251700', '1__5649906977__37147137', '1__8054727060__37147137',
+                   '1__8933594845__37147137', '1__11221656422__37147137', '1__18935483365__122583961', '1__21448128807__122583961',
+                   '1__17595131274__122583961', '1__17349788726__122583961', '1__17073730664__122583961',
+                   '1__17462767801__122583961', '1__19416740522__37251700', '1__22731830626__320642539', '1__23616219555__27495839',
+                   '1__10590701768__37251700', '1__9739323899__37251700', '1__2343883738__697821129')
+              AND shop_platform_id NOT IN (391379079, 391379978, 521935626, 266485724, 451610579, 1099988375, 400054588, 68410045)
+              AND is_deleted = false
+        """
+
+    return aggs_query
+
+
+def run():
+    input_file_path = f'{ROOT_DIR}/Danh sách báo cáo e-report.xlsx'
+    df = load_query_dataframe(input_file_path, 'Sheet1')
+
+    # batch_size = 1
+    batch_size = 10_000
+
     import clickhouse_connect
 
     client = clickhouse_connect.get_client(
@@ -380,102 +455,157 @@ def run_by_row(index, row, client):
         user=clickhouse_config['User'],
         password=clickhouse_config['Password']
     )
-    start_time = datetime.now()
 
-    filter_columns = [
-        'Từ khóa',
-        'Danh mục Shopee',
-        'Danh mục Lazada',
-        'Danh mục Tiki',
-        'Danh mục Tiktok',
-        'Từ khóa loại trừ',
-        'Từ khóa cộng',
-        'Chế độ tìm',
-        'Giá min',
-        'Giá max',
-    ]
-    filter_as_str = ''
-    for col in filter_columns:
-        filter_as_str += f"{row[col]}"
+    start_date = '20230701'
+    end_date = '20240630'
 
-    key_filter_report = text_to_hash_md5(filter_as_str)
-    key_response_report = row['Key']
-    # print('key', key_filter_report, key_response_report)
-    # if key_filter_report == key_response_report:
-    #     print(f"- IGNORE Bộ lọc không thay đổi, bỏ qua {row['Từ khóa']} \n")
-    #     continue
+    for i in range(0, len(df), batch_size):
+        start_time = datetime.now()
+        df_batch = df[i:i + batch_size]
+        query = build_multiple_row_data_query(i, df_batch, start_date, end_date)
+        aggs = client.query(query)
 
-    print(f"- START lấy dữ liệu  từ khóa: {row['Từ khóa']}, dòng số: {index + 1}")
-    query_data_num = row['Lần query data']
-    if math.isnan(query_data_num):
-        query_data_num = 0
+        result = aggs.result_rows[0]
 
-    revenue_total, order_total, product_total, shop_total, \
-        revenue_by_market_place, top_10_product, middle_10_product, \
-        bottom_10_product, shopee_category_str, lazada_category_str, \
-        tiki_category_str, tiktok_category_str = fetch_data_keyword(row, client)
+        for idx, row in df_batch.iterrows():
+            revenue_total = result[idx][0]
+            order_total = result[idx][1]
+            product_total = result[idx][2]
+            shop_total = result[idx][3]
+            revenue_by_platform = result[idx][4]
+            revenue_by_categories__id_2 = result[idx][5]
+            lst_product = result[idx][6]
 
-    row['Lần query data'] = query_data_num + 1
-    row['Key'] = key_filter_report
-    row['Doanh số từng sàn'] = revenue_by_market_place
-    row['Doanh số'] = revenue_total
-    row['Sản lượng'] = order_total
-    row['Sản phẩm có lượt bán'] = product_total
-    row['Số shop'] = shop_total
-    row['Ngành hàng Shopee'] = shopee_category_str
-    # print(shopee_category_str)
-    row['Ngành hàng Lazada'] = lazada_category_str
-#     print(lazada_category_str)
-    row['Ngành hàng Tiki'] = tiki_category_str
-#     print(tiki_category_str)
-    row['Ngành hàng Tiktok'] = tiktok_category_str
-#     print(tiktok_category_str)
+            top_10_product = [p.get('item') for p in lst_product[:10]]
+            middle_10_product = [p.get('item') for p in
+                                 lst_product[len(lst_product) // 2 - 5: len(lst_product) // 2 + 5]]
+            bottom_10_product = [p.get('item') for p in lst_product[-10:]]
 
-    lst_product_name_str = ''
-    for product in top_10_product:
-        revenue = product[2]
-        order_count = '{:,.0f}'.format(product[3], 0)
-        lst_product_name_str += f"{product[1]}\n"
-    for product in middle_10_product:
-        revenue = product[2]
-        order_count = '{:,.0f}'.format(product[3], 0)
-        lst_product_name_str += f"{product[1]}\n"
-    for product in bottom_10_product:
-        revenue = product[2]
-        order_count = '{:,.0f}'.format(product[3], 0)
-        lst_product_name_str += f"{product[1]}\n"
+            revenue_by_market_place = ''
+            shopee_revenue = 0
+            lazada_revenue = 0
+            tiki_revenue = 0
+            tiktok_revenue = 0
+            for item in revenue_by_platform:
+                name = item.get('item')
+                revenue = item.get('count')
+                if name == 'shopee':
+                    shopee_revenue = revenue
+                if name == 'lazada':
+                    lazada_revenue = revenue
+                if name == 'tiki':
+                    tiki_revenue = revenue
+                if name == 'tiktok':
+                    tiktok_revenue = revenue
+                ratio_revenue = round((revenue / revenue_total) * 100, 2)
+                revenue_by_market_place += f"{name} - {format_text_currency(revenue)} - {ratio_revenue}%\n"
+            revenue_by_market_place = revenue_by_market_place[:-1]
 
-    row['Product name'] = lst_product_name_str[:-1]
-    print(f"- DONE query từ khóa: {row['Từ khóa']}, dòng:{index + 1}, trong {datetime.now() - start_time}")
+            lst_shopee_category = [cate for cate in revenue_by_categories__id_2 if
+                                   cate.get('item', '').startswith('1__')]
+            lst_lazada_category = [cate for cate in revenue_by_categories__id_2 if
+                                   cate.get('item', '').startswith('2__')]
+            lst_tiki_category = [cate for cate in revenue_by_categories__id_2 if cate.get('item', '').startswith('3__')]
+            lst_tiktok_category = [cate for cate in revenue_by_categories__id_2 if
+                                   cate.get('item', '').startswith('8__')]
 
-    return index, row
+            shopee_category_str = ''
+            lazada_category_str = ''
+            tiki_category_str = ''
+            tiktok_category_str = ''
+            map_category_obj = get_map_category_obj()
 
-
-def run():
-    input_file_path = f'{ROOT_DIR}/Danh sách báo cáo e-report.xlsx'
-    df = load_query_dataframe(input_file_path, 'Sheet1')
-
-    # batch_size = 1
-    batch_size = 5
-
-    with concurrent.futures.ThreadPoolExecutor() as executor:
-        futures = []
-        for i in range(0, len(df), batch_size):
-            start_time = datetime.now()
-            df_batch = df[i:i + batch_size]
-
-            for index, row in df_batch.iterrows():
-                futures.append(executor.submit(run_by_row, index, row, None))
-
-            for future in concurrent.futures.as_completed(futures):
-                index, row = future.result()
-                if row is None:
+            for cate in lst_shopee_category:
+                category_id = cate.get('item')
+                revenue = cate.get('count')
+                category = map_category_obj.get(category_id)
+                ratio_revenue = round((revenue / shopee_revenue) * 100, 2)
+                if ratio_revenue < 1:
                     continue
-                df.loc[index] = row
+                if category.get('level') == 2:
+                    shopee_category_str += f"{category.get('parent_name')}/{category.get('label')} - {format_text_currency(revenue)} - {ratio_revenue}%\n"
+                if category.get('label') == 'Chưa phân loại':
+                    shopee_category_str += f"{category.get('label')} - {format_text_currency(revenue)} - {ratio_revenue}%\n"
+            shopee_category_str = shopee_category_str[:-1]
 
-            print(f"Time to process batch {i + 1}-{i + batch_size}: {datetime.now() - start_time}")
+            for cate in lst_lazada_category:
+                category_id = cate.get('item')
+                revenue = cate.get('count')
+                category = map_category_obj.get(category_id)
+                ratio_revenue = round((revenue / lazada_revenue) * 100, 2)
+                if ratio_revenue < 1:
+                    continue
+                if category.get('level') == 2:
+                    lazada_category_str += f"{category.get('parent_name')}/{category.get('label')} - {format_text_currency(revenue)} - {ratio_revenue}%\n"
+                if category.get('label') == 'Chưa phân loại':
+                    lazada_category_str += f"{category.get('label')} - {format_text_currency(revenue)} - {ratio_revenue}%\n"
+            lazada_category_str = lazada_category_str[:-1]
 
-            df.to_excel(input_file_path, index=False)
+            for cate in lst_tiki_category:
+                category_id = cate.get('item')
+                revenue = cate.get('count')
+                category = map_category_obj.get(category_id)
+                ratio_revenue = round((revenue / tiki_revenue) * 100, 2)
+                if ratio_revenue < 1:
+                    continue
+                if category.get('level') == 2:
+                    tiki_category_str += f"{category.get('parent_name')}/{category.get('label')} - {format_text_currency(revenue)} - {ratio_revenue}%\n"
+                if category.get('label') == 'Chưa phân loại':
+                    tiki_category_str += f"{category.get('label')} - {format_text_currency(revenue)} - {ratio_revenue}%\n"
+            tiki_category_str = tiki_category_str[:-1]
+
+            for cate in lst_tiktok_category:
+                category_id = cate.get('item')
+                category = map_category_obj.get(category_id)
+                if category.get('level') != 1:
+                    continue
+
+                revenue = cate.get('count')
+                ratio_revenue = round((revenue / tiktok_revenue) * 100, 2)
+                tiktok_category_str += f"{category.get('label')} - {format_text_currency(revenue)} - {ratio_revenue}%\n"
+            tiktok_category_str = tiktok_category_str[:-1]
+
+            lst_product_name_str = ''
+            for product in top_10_product + middle_10_product + bottom_10_product:
+                lst_product_name_str += f"{product}\n"
+
+            lst_product_name_str = lst_product_name_str[:-1]
+
+            filter_columns = [
+                'Từ khóa',
+                'Danh mục Shopee',
+                'Danh mục Lazada',
+                'Danh mục Tiki',
+                'Danh mục Tiktok',
+                'Từ khóa loại trừ',
+                'Từ khóa cộng',
+                'Chế độ tìm',
+                'Giá min',
+                'Giá max',
+            ]
+            filter_as_str = ''
+            for col in filter_columns:
+                filter_as_str += f"{row[col]}"
+
+            key_filter_report = text_to_hash_md5(filter_as_str)
+            row['Lần query data'] = row['Lần query data'] + 1 if 'Lần query data' in row else 1
+            row['Key'] = key_filter_report
+            row['Doanh số từng sàn'] = revenue_by_market_place
+            row['Doanh số'] = format_text_currency(revenue_total)
+            row['Sản lượng'] = format_text_currency(order_total)
+            row['Sản phẩm có lượt bán'] = format_text_currency(product_total)
+            row['Số shop'] = format_text_currency(shop_total)
+            row['Ngành hàng Shopee'] = shopee_category_str
+            row['Ngành hàng Lazada'] = lazada_category_str
+            row['Ngành hàng Tiki'] = tiki_category_str
+            row['Ngành hàng Tiktok'] = tiktok_category_str
+            row['Product name'] = lst_product_name_str[:-1]
+
+            df.loc[i + idx] = row
+
+        print(f"Time to process batch {i + 1}-{i + batch_size}: {datetime.now() - start_time}")
+
+        df.to_excel(input_file_path, index=False)
 
 
 if __name__ == '__main__':
