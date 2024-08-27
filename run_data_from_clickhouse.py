@@ -322,7 +322,34 @@ def get_categories_from_row(row: Series, platform: str = 'shopee'):
 
 
 def build_multiple_row_data_query(index, df_batch, start_date, end_date):
-    start_time = datetime.now()
+    has_any_filter_change = False
+    for idx, row in df_batch.iterrows():
+        filter_columns = [
+            'Từ khóa',
+            'Danh mục Shopee',
+            'Danh mục Lazada',
+            'Danh mục Tiki',
+            'Danh mục Tiktok',
+            'Từ khóa loại trừ',
+            'Từ khóa cộng',
+            'Chế độ tìm',
+            'Giá min',
+            'Giá max',
+        ]
+        filter_as_str = ''
+        for col in filter_columns:
+            filter_as_str += f"{row[col]}"
+
+        key_filter_report = text_to_hash_md5(filter_as_str)
+        key_response_report = row['Key']
+
+        has_change_filter = key_filter_report != key_response_report
+
+        if has_change_filter:
+            has_any_filter_change = True
+            break
+    if not has_any_filter_change:
+        return None
     aggs_query = "SELECT"
     for idx, row in df_batch.iterrows():
         filter_columns = [
@@ -340,6 +367,11 @@ def build_multiple_row_data_query(index, df_batch, start_date, end_date):
         filter_as_str = ''
         for col in filter_columns:
             filter_as_str += f"{row[col]}"
+
+        key_filter_report = text_to_hash_md5(filter_as_str)
+        key_response_report = row['Key']
+
+        has_change_filter = key_filter_report != key_response_report
 
         lst_keyword = row['Từ khóa'].split(',') if isinstance(row['Từ khóa'], str) else []
         lst_exclude_keyword = []
@@ -382,14 +414,18 @@ def build_multiple_row_data_query(index, df_batch, start_date, end_date):
         )
 
         where_query = build_clickhouse_query(filter_report)
-        aggs_query += f"""
-            (sumIf(revenue_custom, {where_query}),
-            sumIf(order_custom, {where_query}),
-            countIf(distinct product_base_id, {where_query}),
-            countIf(distinct shop_base_id, {where_query}),
-            topKWeightedIf(30, 3, 'counts')(platform, revenue_custom, {where_query}),
-            topKWeightedIf(30, 3, 'counts')(categories__id_2, revenue_custom, {where_query}),
-            topKWeightedIf(500, 3, 'counts')(product_name, revenue_custom, {where_query})) as report_{idx},"""
+        if has_change_filter:
+            aggs_query += f"""
+                (sumIf(revenue_custom, {where_query}),
+                sumIf(order_custom, {where_query}),
+                countIf(distinct product_base_id, {where_query}),
+                countIf(distinct shop_base_id, {where_query}),
+                topKWeightedIf(30, 3, 'counts')(platform, revenue_custom, {where_query}),
+                topKWeightedIf(30, 3, 'counts')(categories__id_2, revenue_custom, {where_query}),
+                topKWeightedIf(500, 3, 'counts')(product_name, revenue_custom, {where_query})) as report_{idx},"""
+        else:
+            aggs_query += f"""
+                ('', '', '', '', '', '', '') as report_{idx},"""
 
     start_date = datetime.strptime(start_date, '%Y%m%d').strftime('%Y-%m-%d')
     end_date = datetime.strptime(end_date, '%Y%m%d').strftime('%Y-%m-%d')
@@ -473,13 +509,22 @@ def run():
     for i in range(0, len(df), batch_size):
         start_time = datetime.now()
         df_batch = df[i:i + batch_size]
+
         query = build_multiple_row_data_query(i, df_batch, start_date, end_date)
+        if not query:
+            continue
+
         aggs = client.query(query)
 
         result = aggs.result_rows[0]
 
         for idx, result_row in zip(range(i, i + batch_size), result):
+            if not result_row:
+                print(f"Row {idx} is empty")
+                continue
             revenue_total = result_row[0]
+            if not revenue_total:
+                continue
             order_total = result_row[1]
             product_total = result_row[2]
             shop_total = result_row[3]
