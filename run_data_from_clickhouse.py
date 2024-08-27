@@ -1,5 +1,7 @@
 import asyncio
 import json
+import re
+
 import math
 import os
 from datetime import datetime
@@ -16,7 +18,6 @@ from helper.logger_helper import LoggerSimple
 from helper.text_hash_helper import text_to_hash_md5
 from schedule.report_service.build_es_query_service import build_query_es_from_api, get_aggs_runtime_mapping_es, \
     FilterReport, Range
-import concurrent.futures
 
 clickhouse_config = {
     'Host': 'sv7.beecost.net',
@@ -28,6 +29,15 @@ clickhouse_config = {
 logger = LoggerSimple(name=__name__).logger
 
 ROOT_DIR = os.path.dirname(os.path.abspath(__file__))
+
+
+def sanitize_excel_string(value: str) -> str:
+    """
+    Sanitize a string to be safely used in Excel cells.
+    """
+    if isinstance(value, str):
+        return re.sub(r"[\000-\010]|[\013-\014]|[\016-\037]", "", value)
+    return value
 
 
 def format_text_currency(price, min_value=1_000):
@@ -442,10 +452,11 @@ def build_multiple_row_data_query(index, df_batch, start_date, end_date):
 
 def run():
     input_file_path = f'{ROOT_DIR}/Danh sách báo cáo e-report.xlsx'
+    input_file_path = f'/Users/tienbm/Downloads/danh sách báo cáo thời trang nữ.xlsx'
     df = load_query_dataframe(input_file_path, 'Sheet1')
-
+    pd.options.mode.copy_on_write = True
     # batch_size = 1
-    batch_size = 10_000
+    batch_size = 200
 
     import clickhouse_connect
 
@@ -467,14 +478,14 @@ def run():
 
         result = aggs.result_rows[0]
 
-        for idx, row in df_batch.iterrows():
-            revenue_total = result[idx][0]
-            order_total = result[idx][1]
-            product_total = result[idx][2]
-            shop_total = result[idx][3]
-            revenue_by_platform = result[idx][4]
-            revenue_by_categories__id_2 = result[idx][5]
-            lst_product = result[idx][6]
+        for idx, result_row in zip(range(i, i + batch_size), result):
+            revenue_total = result_row[0]
+            order_total = result_row[1]
+            product_total = result_row[2]
+            shop_total = result_row[3]
+            revenue_by_platform = result_row[4]
+            revenue_by_categories__id_2 = result_row[5]
+            lst_product = result_row[6]
 
             top_10_product = [p.get('item') for p in lst_product[:10]]
             middle_10_product = [p.get('item') for p in
@@ -548,6 +559,8 @@ def run():
                 ratio_revenue = round((revenue / tiki_revenue) * 100, 2)
                 if ratio_revenue < 1:
                     continue
+                if not category:
+                    continue
                 if category.get('level') == 2:
                     tiki_category_str += f"{category.get('parent_name')}/{category.get('label')} - {format_text_currency(revenue)} - {ratio_revenue}%\n"
                 if category.get('label') == 'Chưa phân loại':
@@ -571,6 +584,7 @@ def run():
 
             lst_product_name_str = lst_product_name_str[:-1]
 
+            row = df_batch.loc[idx]
             filter_columns = [
                 'Từ khóa',
                 'Danh mục Shopee',
@@ -588,23 +602,21 @@ def run():
                 filter_as_str += f"{row[col]}"
 
             key_filter_report = text_to_hash_md5(filter_as_str)
-            row['Lần query data'] = row['Lần query data'] + 1 if 'Lần query data' in row else 1
-            row['Key'] = key_filter_report
-            row['Doanh số từng sàn'] = revenue_by_market_place
-            row['Doanh số'] = format_text_currency(revenue_total)
-            row['Sản lượng'] = format_text_currency(order_total)
-            row['Sản phẩm có lượt bán'] = format_text_currency(product_total)
-            row['Số shop'] = format_text_currency(shop_total)
-            row['Ngành hàng Shopee'] = shopee_category_str
-            row['Ngành hàng Lazada'] = lazada_category_str
-            row['Ngành hàng Tiki'] = tiki_category_str
-            row['Ngành hàng Tiktok'] = tiktok_category_str
-            row['Product name'] = lst_product_name_str[:-1]
-
-            df.loc[i + idx] = row
+            df.loc[idx, 'Lần query data'] = row['Lần query data'] + 1 if 'Lần query data' in row else 1
+            df.loc[idx, 'Key'] = key_filter_report
+            df.loc[idx, 'Doanh số từng sàn'] = revenue_by_market_place
+            df.loc[idx, 'Doanh số'] = format_text_currency(revenue_total)
+            df.loc[idx, 'Sản lượng'] = format_text_currency(order_total)
+            df.loc[idx, 'Sản phẩm có lượt bán'] = format_text_currency(product_total)
+            df.loc[idx, 'Số shop'] = format_text_currency(shop_total)
+            df.loc[idx, 'Ngành hàng Shopee'] = shopee_category_str
+            df.loc[idx, 'Ngành hàng Lazada'] = lazada_category_str
+            df.loc[idx, 'Ngành hàng Tiki'] = tiki_category_str
+            df.loc[idx, 'Ngành hàng Tiktok'] = tiktok_category_str
+            df.loc[idx, 'Product name'] = lst_product_name_str[:-1]
 
         print(f"Time to process batch {i + 1}-{i + batch_size}: {datetime.now() - start_time}")
-
+        df = df.map(sanitize_excel_string)
         df.to_excel(input_file_path, index=False)
 
 
