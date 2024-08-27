@@ -53,6 +53,11 @@ class FilterReport(BaseModel):
     order_revenue_90d_range: Range | None = None
     order_revenue_180d_range: Range | None = None
 
+    lst_shopee_categories: List[str] | None = None
+    lst_lazada_categories: List[str] | None = None
+    lst_tiki_categories: List[str] | None = None
+    lst_tiktok_categories: List[str] | None = None
+
     def to_dict(self):
         return json.loads(self.json())
 

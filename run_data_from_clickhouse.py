@@ -9,6 +9,7 @@ import pandas as pd
 from dateutil.relativedelta import relativedelta
 from pandas import Series
 
+from app.constant.constant_metric import get_map_category_obj
 from app.db.session_es_metric import get_es_metric_session
 from helper.elasticsearch7_helper import search_v2
 from helper.logger_helper import LoggerSimple
@@ -16,244 +17,40 @@ from helper.text_hash_helper import text_to_hash_md5
 from schedule.report_service.build_es_query_service import build_query_es_from_api, get_aggs_runtime_mapping_es, \
     FilterReport, Range
 from schedule.report_service.transform_es_response_service import _tranform_aggs
+import clickhouse_connect
+
+clickhouse_config = {
+    'Host': 'sv7.beecost.net',
+    'Port': '8124',
+    'User': 'minhtien',
+    'Password': 't5W54BybGTZxLPzy',
+}
 
 logger = LoggerSimple(name=__name__).logger
 
 ROOT_DIR = os.path.dirname(os.path.abspath(__file__))
 
-default_exclude_keyword = [
-    "https://shopee.vn/product/266619909/22222367403",
-    "https://shopee.vn/product/266619909/23722365583",
-    "https://shopee.vn/product/37147137/11141784570",
-    "https://shopee.vn/product/233692311/21482936482",
-    "https://shopee.vn/product/147191228/17651456174",
-    "https://shopee.vn/product/27495839/25106186302",
-    "[QT_Pampers]",
-    "https://shopee.vn/gifttui-tote-kho-lon-co-2-tui-truoc-phoi-vang-i.1041184627.22978629888",
-    "https://shopee.vn/giftcombo-12-mat-na-dat-set-rare-earth-deep-pore-cleansing-masque-5ml-i.1041184627.20195900981",
-    "https://shopee.vn/giftkem-duong-am-kiehls-ultra-facial-cream-14ml-i.1041184627.21491369435",
-    "https://shopee.vn/giftbo-doi-nuoc-can-bang-hoa-cuc-kiehls-calendula-herbal-extract-alcohol-free-toner-40ml-i.1041184627.18293309371",
-    "https://shopee.vn/giftbo-2-kem-duong-am-7ml-i.1041184627.23653135954",
-    "https://shopee.vn/giftsua-rua-mat-hoa-cuc-kiehls-calendula-deep-cleansing-foaming-face-wash-30ml-i.1041184627.22075364950",
-    "https://shopee.vn/giftcombo-4-duong-chat-serum-lam-sang-da-mo-tham-mun-15ml-mau-thu-goi-giay-i.1041184627.24958033319",
-    "https://shopee.vn/giftgel-duong-am-kiehls-ultra-facial-oil-free-gel-cream-14ml-i.1041184627.21582424436",
-    "https://shopee.vn/giftcombo-12-gel-duong-am-kiehls-ultra-facial-oil-free-gel-cream-3ml-sachet-i.1041184627.24058608585",
-    "https://shopee.vn/giftkem-duong-am-kiehls-ultra-facial-cream-7ml-i.1041184627.18682436952",
-    "https://shopee.vn/giftcombo-2-tinh-chat-retinol-micro-dose-giup-tai-tao-giup-da-san-chac-dan-hoi-10ml-i.1041184627.22487271251",
-    "https://shopee.vn/giftcombo-7-mat-na-dat-set-rare-earth-deep-pore-cleansing-masque-5ml-i.1041184627.22759580760",
-    "https://shopee.vn/giftcombo-2-kem-duong-am-kiehls-ultra-facial-cream-14ml-i.1041184627.18783598787",
-    "https://shopee.vn/gifttinh-chat-serum-lam-sang-da-mo-tham-mun-kiehls-clearly-corrective-dark-spot-solution-4ml-i.1041184627.22353137296",
-    "https://shopee.vn/giftcombo-4-gel-duong-am-kiehls-ultra-facial-oil-free-gel-cream-3ml-sachet-i.1041184627.24005630082",
-    "https://shopee.vn/giftkem-duong-phuc-hoi-ban-dem-14ml-kiehls-mid-recovery-cream-i.1041184627.14399401581",
-    "https://shopee.vn/giftcombo-6-mat-na-dat-set-rare-earth-deep-pore-cleansing-masque-5ml-i.1041184627.21286543196",
-    "https://shopee.vn/giftnuoc-can-bang-hoa-cuc-kiehls-calendula-herbal-extract-alcohol-free-toner-75ml-i.1041184627.25366405828",
-    "https://shopee.vn/giftcombo-4-mat-na-dat-set-rare-earth-deep-pore-cleansing-masque-5ml-i.1041184627.20595900951",
-    "GIFT_Nước",
-    "GIFT_Tinh",
-    "GIFT_",
-    "GIFT_Gel",
-    "GIFT_Sữa",
-    "GIFT_TÚI",
-    "GIFT_Combo",
-    "GIFT_Tinh chất (Serum)",
-    "GIFT_[Phiên bản lễ hội 2022] Túi",
-    "GIFT_ Combo",
-    "GIFT_Kem",
-    "Gift_Bộ",
-    "https://shopee.vn/hang-tangdau-tay-trang-espoir-all-makeup-deep-cleansing-oil-i.341418380.12881879616",
-    "https://shopee.vn/giftnuoc-tay-trang-thanh-loc-va-lam-sach-sau-neutrogena-deep-clean-dung-tich-400ml-combo-2-kem-duong-i.78546729.22718228347",
-    "https://shopee.vn/giftdau-tay-trang-kiehls-midnight-recovery-botanical-cleansing-oil-40ml-i.1041184627.20283585269",
-    "https://shopee.vn/-GIFT-H%C3%80NG-T%E1%BA%B6NG-KH%C3%94NG-B%C3%81N-S%C3%A1p-t%E1%BA%A9y-trang-BANILA-CO-Clean-It-Zero-Cleansing-Balm-Pore-Clarifying-Blister-(3ml)-i.948819478.17093392925?sp_atk=a0de330f-e238-41de-a055-08349b5ca99a&xptdk=a0de330f-e238-41de-a055-08349b5ca99a",
-    "https://shopee.vn/-GIFT-H%C3%80NG-T%E1%BA%B6NG-KH%C3%94NG-B%C3%81N-S%C3%A1p-t%E1%BA%A9y-trang-Clean-It-Zero-Original-Miniature-(7ml)-i.948819478.19674370457",
-    "https://shopee.vn/vi-cam-tay-tien-loi-la-roche-posay-i.37251700.20816632520",
-    "https://shopee.vn/product/1041184627/18293673509",
-    "https://shopee.vn/sua-tieu-duong-diasure-850g-ban-moi-date-moi-i.102374043.18981035578",
-    "https://shopee.vn/giftnuoc-duong-da-ngan-ngua-lao-hoa-elixir-bouncing-moisture-lotion-2-18ml-i.1017203611.24501797634",
-    "https://shopee.vn/giftcombo-2-sua-tam-goi-toan-than-johnsons-top-to-toe-200ml-sua-tam-goi-toan-than-johnsons-top-to-to-i.78546729.15698792132",
-    "https://shopee.vn/giftcombo-sua-tam-goi-toan-than-johnsons-ttt-100ml-nuoc-hoa-ban-mai-50ml-2-kem-duong-aveeno-14g-i.78546729.22744159326",
-    "https://shopee.vn/giftphan-thom-cho-be-huong-hoa-johnsons-baby-powder-200g-sua-tam-goi-toan-than-johnsons-top-to-toe-1-i.78546729.19188744016",
-    "https://shopee.vn/giftcombo-2-sua-tam-goi-toan-than-mem-min-johnson-baby-bath-cotton-touch-200ml-i.78546729.22126709725",
-    "https://shopee.vn/giftphan-thom-cho-be-huong-hoa-johnsons-baby-powder-200g-combo-2-sua-tam-goi-toan-than-mem-min-johns-i.78546729.22836017144",
-    "https://shopee.vn/giftcombo-3-sua-tam-goi-toan-than-johnsons-top-to-toe-200ml-i.78546729.18877323592",
-    "https://shopee.vn/qtpampers-thau-rua-mat-notoro-21-cm-i.90366612.22856676638",
-    "https://shopee.vn/giftphan-thom-cho-be-huong-hoa-johnsons-baby-powder-200g-sua-tam-goi-toan-than-johnsons-top-to-toe-1-i.78546729.23418231110?is_from_login=True",
-    "https://shopee.vn/may-laser-xoa-xam-tri-nam-k4-i.954659720.21273342308",
-    "https://shopee.vn/may-giam-beo-ret-rf-slimming-dot-mo-da-tang-bh-24-thang-i.180651803.23241302273",
-    "https://shopee.vn/may-giam-beo-dot-mo-da-tang-giam-beo-cong-nghe-ret-rf-slimming-dung-cu-lam-thon-gon-co-the-dung-tron-i.944545485.22967804703",
-    "https://shopee.vn/bh-24-thang-may-hera-2in1-triet-long-xoa-xam-i.180651803.21476491960",
-    "https://shopee.vn/may-triet-long-xoa-xam-diode-laser-soprano-titanium-mau-2023-i.182053498.22228577909",
-    "https://shopee.vn/may-triet-long-xoa-xam-dpl-korea-busan-i.954659720.23024413633",
-    "https://shopee.vn/may-xoa-xam-xoa-nam-tan-nhang-may-laser-ruikd-vua-cua-laser-i.182053498.23630395242",
-    "https://shopee.vn/phi-thuyen-tam-trang-hong-ngoai-phi-thuyen-giam-beo-san-go-hang-chinh-hang-i.391379978.22448104536",
-    "https://shopee.vn/phi-thuyen-tam-trang-giam-beo-hong-ngoai-collagen-phi-thuyen-tam-trang-collagen-i.391379978.18990756057",
-    "https://shopee.vn/may-laser-picosure-nano-may-truc-khuyu-xoa-xam-xoa-nam-tan-nhang-may-laser-xoa-xam-truc-khuyu-i.391379978.17298284924",
-    "https://shopee.vn/giftdau-goi-giup-toc-chac-khoe-giam-dut-gay-va-dai-hon-loreal-professionnel-serie-expert-pro-longer--i.487013605.15510206761",
-    "https://shopee.vn/hbgift-bo-guong-luoc-uriage-i.300458619.19489251460",
-    "https://shopee.vn/bo-gel-rua-mat-cho-da-dau-la-roche-posay-effaclar-purifying-foaming-gel-50ml-i.37251700.10815055198",
-    "https://shopee.vn/giftcombo-10-sua-tam-goi-toan-than-johnsons-top-to-toe-100ml-i.78546729.23533338149",
-    "https://shopee.vn/giftsua-tam-goi-toan-than-johnsons-top-to-toe-500ml-khan-uot-bobby-care-khong-huong-80-mieng-i.78546729.22842437672",
-    "https://shopee.vn/giftsua-tam-johnsons-chua-sua-va-gao-dung-tich-500ml-sua-tam-goi-toan-than-mem-min-johnsons-baby-top-i.78546729.23118220623",
-    "https://shopee.vn/giftcombo-2-sua-tam-goi-toan-than-mem-min-johnsons-cottontouch-top-to-toe-bath-500ml-i.78546729.23529023038",
-    "https://shopee.vn/giftsua-tam-goi-toan-than-johnsons-top-to-toe-200ml-combo-2-sua-tam-goi-toan-than-mem-min-johnsons-c-i.78546729.22035520048",
-    "https://shopee.vn/giftsua-tam-goi-toan-than-johnsons-top-to-toe-200ml-sua-tam-goi-toan-than-johnsons-top-to-toe-100ml-i.78546729.16493661986",
-    "https://shopee.vn/giftcombo-2-sua-tam-goi-johnson-baby-bath-cotton-touch-200ml-sua-tam-goi-johnsons-cottontouch-top-to-i.78546729.23326697557",
-    "https://shopee.vn/giftsua-tam-goi-toan-than-johnsons-top-to-toe-500ml-sua-tam-goi-toan-than-johnsons-top-to-toe-100ml--i.78546729.13498828558",
-    "https://shopee.vn/giftsua-tam-goi-toan-than-mem-min-johnson-baby-bath-cotton-touch-200ml-sua-tam-goi-toan-than-johnson-i.78546729.19371170617",
-    "https://shopee.vn/giftcombo-5-gel-duong-am-kiehls-ultra-facial-oil-free-gel-cream-3ml-sachet-i.1041184627.21087297107",
-    "https://shopee.vn/gift-combo-8-kem-duong-ultra-facial-cream-3ml-i.1041184627.25603574145",
-    "https://shopee.vn/qt-bobby-ghe-nhua-xep-duy-tan-cao-cap-cho-be-i.989774266.23053544950",
-    "https://shopee.vn/km-chuong-trinh-qua-huggies-i.76421217.23570023664",
-    "https://shopee.vn/chi-tang-1-hop-tren-1-don-hang-hop-dung-san-pham-skinc-i.530333613.23640709144",
-    "https://shopee.vn/bo-doi-gel-rua-mat-tao-bot-la-roche-posay-effaclar-purifying-gel-15ml-i.37251700.21249461418",
-    "https://shopee.vn/product/37147137/5649906977",
-    "https://shopee.vn/product/37147137/8054727060",
-    "https://shopee.vn/product/37147137/8933594845",
-    "https://shopee.vn/product/37147137/11221656422",
-    "https://shopee.vn/bao-nguyen-may-laser-co2-fractionallasertruc-khuyuchuyen-dieu-tri-seo-rocat-mun-thitmun-ruoitre-hoa--i.122583961.18935483365",
-    "https://shopee.vn/bao-nguyen-may-triet-long-diode-laser-soprano-titanium-bao-hanh-12-thang-mau-2023-10-thanh-50-trieu--i.122583961.21448128807",
-    "https://shopee.vn/bao-nguyen-may-triet-long-diode-808-may-2-in-1-10-thanh-50-trieu-xunglaser-xoa-nam-tan-nhang-mau-202-i.122583961.17595131274",
-    "https://shopee.vn/bao-nguyen-may-triet-long-diode-808-nm-2in1-cong-nghe-cao-laser-va-triet-long-may-loai-1-bao-hanh-12-i.122583961.17349788726",
-    "https://shopee.vn/bao-nguyen-may-triet-long-diode-laser-1-tay-cam-triet-long-mau-2023-bao-hanh-12-thang-i.122583961.17073730664",
-    "https://shopee.vn/bao-nguyen-may-xoa-xam-laser-q12-chuyen-xoa-xamnamtan-nhangxoa-moi-may-mi-xoa-xam-tato-bao-hanh-12-t-i.122583961.17462767801",
-    "https://shopee.vn/balo-xach-tay-hinh-chu-nhat-la-roche-posay-i.37251700.19416740522",
-    "[MKB Gift]",
-    "[QT_Huggies]",
-    "https://shopee.vn/balo-bioamicus-cao-cap-cho-be-i.320642539.22731830626",
-    "(QT_Huggies)",
-    "https://shopee.vn/qtmu-huou-cao-co-bioamicus-mau-xanh-cho-be-i.27495839.23616219555",
-    "https://shopee.vn/product/37251700/10590701768",
-    "https://shopee.vn/product/37251700/9739323899",
-    "https://shopee.vn/que-go-de-thoa-kem-tay-long-va-loai-bo-long-1-que-i.697821129.2343883738",
-    "không bán",
-    "[HC GIFT]",
-    "[Gift]",
-    "[Quà tặng]",
-    "[Hàng tặng không bán]",
-    "[HB GIFT]",
-    "[Quà tặng không bán]",
-    "quà tặng không bán",
-    "https://shopee.vn/dogothangtailoc",
-    "https://shopee.vn/thietbispaphuxuyen",
-    "https://shopee.vn/shop/400054588",
-    "https://shopee.vn/shop/391379079",
-    "https://shopee.vn/thietbispa24h?",
-    "https://shopee.vn/shop/521935626",
-    "https://shopee.vn/shop/68410045",
-    "https://shopee.vn/shop/266485724",
-]
 
+def format_text_currency(price, min_value=1_000_000):
+    if not price:
+        return price
 
-async def _build_es_query_from_filter_report(filter_report: FilterReport, start_date, end_date, size_product=75):
-    query = await build_query_es_from_api(filter_report, start_date, end_date)
-    fields = [
-        "order_count_custom",
-        "order_revenue_custom",
-        "order_count_custom_adjacent",
-        "order_revenue_custom_adjacent",
-        "review_count_custom"
-    ]
-    _source = [
-        "product_base_id",
-        "shop_base_id",
-        "product_name",
-        "url_thumbnail",
-        "official_type",
-        "bee_brand",
-        "shop_platform_name",
-        "shop_url",
-        "price",
-        "order_count",
-        "rating_avg",
-        "rating_count",
-        "revenue",
-        "platform_created_at",
-        "price_min",
-        "price_max",
-        "order_count_30d",
-        "order_revenue_30d",
-        "order_count_custom_adjacent",
-        "order_revenue_custom_adjacent",
-        "price_updated_at"
-    ]
+    price = float(price)
 
-    lst_aggs, lst_runtime_mapping = get_aggs_runtime_mapping_es(filter_report, start_date, end_date)
+    def round_and_format(price, divisor, unit):
+        rounded_price = '{:,.0f}'.format(round(price / divisor, 0))
+        return f"{rounded_price}{unit}"
 
-    query_es_default = {
-        'query': query,
-        'runtime_mappings': lst_runtime_mapping,
-        'fields': fields,
-        '_source': _source,
-        'aggs': lst_aggs,
-        "size": size_product,
-        "sort": [
-            {
-                "order_revenue_30d": {
-                    "order": "desc"
-                }
-            }
-        ],
-    }
+    if price % 1_000_000_000 != 0:
+        return round_and_format(price, 1_000_000_000, " tỷ")
 
-    three_month_ago_ts = int((datetime.now() - relativedelta(months=3)).timestamp()) * 1000
-    query_new_product = json.loads(json.dumps(query))
-    query_new_product['bool']['must'].append({
-        "range": {
-            "platform_created_at": {
-                "gte": three_month_ago_ts
-            }
-        }
-    })
-    query_es_new_product = {
-        'query': query_new_product,
-        'runtime_mappings': lst_runtime_mapping,
-        'aggs': lst_aggs,
-        'fields': fields,
-        '_source': _source,
-        "size": size_product,
-        "sort": [
-            {
-                "order_revenue_30d": {
-                    "order": "desc"
-                }
-            }
-        ],
-    }
+    if price % 1_000_000 != 0 and price >= min_value:
+        return round_and_format(price, 1_000_000, " triệu")
 
-    query_es_top_revenue_custom = {
-        'query': query,
-        'runtime_mappings': lst_runtime_mapping,
-        'fields': fields,
-        '_source': ['product_name', 'price'],
-        "size": size_product,
-        "sort": [
-            {
-                "order_revenue_custom": {
-                    "order": "desc"
-                }
-            }
-        ],
-    }
+    if price % 1000 != 0 and price >= min_value:
+        return round_and_format(price, 1000, " nghìn")
 
-    query_es_top_1000_product = {
-        'query': query,
-        'runtime_mappings': lst_runtime_mapping,
-        '_source': ['product_base_id'],
-        "size": 1000,
-        "sort": [
-            {
-                "order_revenue_30d": {
-                    "order": "desc"
-                }
-            }
-        ],
-    }
-
-    return {
-        'query_es_default': query_es_default,
-        'query_es_new_product': query_es_new_product,
-        'query_es_top_revenue_custom': query_es_top_revenue_custom,
-        'query_es_top_1000_product': query_es_top_1000_product,
-    }
+    return round_and_format(price, 1, "")
 
 
 def load_query_dataframe(file_path: str, sheet_name: str = None) -> pd.DataFrame:
@@ -263,10 +60,125 @@ def load_query_dataframe(file_path: str, sheet_name: str = None) -> pd.DataFrame
         return pd.read_excel(file_path, sheet_name=sheet_name)
 
 
-async def fetch_data_keyword(row):
+def build_clickhouse_query(filer_report, start_date, end_date, size_product):
+    start_date = datetime.strptime(start_date, '%Y%m%d').strftime('%Y-%m-%d')
+    end_date = datetime.strptime(end_date, '%Y%m%d').strftime('%Y-%m-%d')
+    where_query = f""" 
+        FROM (SELECT *,
+             arraySum(x -> if(x.1 between '{start_date}' and '{end_date}', x.3, 0),
+                      order_revenue_arr) AS revenue_custom,
+             arraySum(x -> if(x.1 between '{start_date}' and '{end_date}', x.2, 0),
+                      order_revenue_arr) AS order_custom
+        FROM analytics.products) p
+        WHERE platform_id IN (1, 2, 3, 8) 
+            AND order_custom >= 1 
+            AND (rating_count * 1.0 > order_count * 0.03)
+            AND NOT (product_name ILIKE '%[QT_Pampers]%' OR product_name ILIKE '%GIFT_Nước%' OR
+               product_name ILIKE '%GIFT_Tinh%' OR product_name ILIKE '%GIFT_%' OR product_name ILIKE '%GIFT_Gel%' OR
+               product_name ILIKE '%GIFT_Sữa%' OR product_name ILIKE '%GIFT_TÚI%' OR product_name ILIKE '%GIFT_Combo%' OR
+               product_name ILIKE '%GIFT_Tinh chất (Serum)%' OR product_name ILIKE '%GIFT_[Phiên bản lễ hội 2022] Túi%' OR
+               product_name ILIKE '%GIFT_ Combo%' OR product_name ILIKE '%GIFT_Kem%' OR product_name ILIKE '%Gift_Bộ%' OR
+               product_name ILIKE '%[MKB Gift]%' OR product_name ILIKE '%[QT_Huggies]%' OR
+               product_name ILIKE '%(QT_Huggies)%' OR product_name ILIKE '%không bán%' OR
+               product_name ILIKE '%[HC GIFT]%' OR product_name ILIKE '%[Gift]%' OR product_name ILIKE '%[Quà tặng]%' OR
+               product_name ILIKE '%[Hàng tặng không bán]%' OR product_name ILIKE '%[HB GIFT]%' OR
+               product_name ILIKE '%[Quà tặng không bán]%' OR product_name ILIKE '%quà tặng không bán%')
+           AND product_base_id NOT IN
+              ('1__24957347281__14063555', '1__22222367403__266619909', '1__23722365583__266619909', '1__11141784570__37147137',
+               '1__21482936482__233692311', '1__17651456174__147191228', '1__25106186302__27495839',
+               '1__22978629888__1041184627', '1__20195900981__1041184627', '1__21491369435__1041184627',
+               '1__18293309371__1041184627', '1__23653135954__1041184627', '1__22075364950__1041184627',
+               '1__24958033319__1041184627', '1__21582424436__1041184627', '1__24058608585__1041184627',
+               '1__18682436952__1041184627', '1__22487271251__1041184627', '1__22759580760__1041184627',
+               '1__18783598787__1041184627', '1__22353137296__1041184627', '1__24005630082__1041184627',
+               '1__14399401581__1041184627', '1__21286543196__1041184627', '1__25366405828__1041184627',
+               '1__20595900951__1041184627', '1__12881879616__341418380', '1__22718228347__78546729',
+               '1__20283585269__1041184627', '1__17093392925__948819478', '1__19674370457__948819478',
+               '1__20816632520__37251700', '1__18293673509__1041184627', '1__18981035578__102374043',
+               '1__24501797634__1017203611', '1__15698792132__78546729', '1__22744159326__78546729', '1__19188744016__78546729',
+               '1__22126709725__78546729', '1__22836017144__78546729', '1__18877323592__78546729', '1__22856676638__90366612',
+               '1__23418231110__78546729', '1__21273342308__954659720', '1__23241302273__180651803',
+               '1__22967804703__944545485', '1__21476491960__180651803', '1__22228577909__182053498',
+               '1__23024413633__954659720', '1__23630395242__182053498', '1__22448104536__391379978',
+               '1__18990756057__391379978', '1__17298284924__391379978', '1__15510206761__487013605',
+               '1__19489251460__300458619', '1__10815055198__37251700', '1__23533338149__78546729', '1__22842437672__78546729',
+               '1__23118220623__78546729', '1__23529023038__78546729', '1__22035520048__78546729', '1__16493661986__78546729',
+               '1__23326697557__78546729', '1__13498828558__78546729', '1__19371170617__78546729', '1__21087297107__1041184627',
+               '1__25603574145__1041184627', '1__23053544950__989774266', '1__23570023664__76421217',
+               '1__23640709144__530333613', '1__21249461418__37251700', '1__5649906977__37147137', '1__8054727060__37147137',
+               '1__8933594845__37147137', '1__11221656422__37147137', '1__18935483365__122583961', '1__21448128807__122583961',
+               '1__17595131274__122583961', '1__17349788726__122583961', '1__17073730664__122583961',
+               '1__17462767801__122583961', '1__19416740522__37251700', '1__22731830626__320642539', '1__23616219555__27495839',
+               '1__10590701768__37251700', '1__9739323899__37251700', '1__2343883738__697821129')
+          AND shop_platform_id NOT IN (391379079, 391379978, 521935626, 266485724, 451610579, 1099988375, 400054588, 68410045)
+          AND is_deleted = false
+    """
+
+    lst_category_base_id = filer_report.lst_category_base_id
+    if lst_category_base_id:
+        where_query += f" AND ("
+        where_query += f" categories__id_1 IN {tuple(lst_category_base_id)} "
+        where_query += f" OR categories__id_2 IN {tuple(lst_category_base_id)} "
+        where_query += f" OR categories__id_3 IN {tuple(lst_category_base_id)} "
+        where_query += f" OR categories__id_4 IN {tuple(lst_category_base_id)} "
+        where_query += f" OR categories__id_5 IN {tuple(lst_category_base_id)} "
+        where_query += f")"
+
+    is_split_keyword = filer_report.is_smart_queries
+    if filer_report.lst_keyword:
+        where_query += f" AND ("
+        for keyword in filer_report.lst_keyword:
+            where_query += f"("
+            if is_split_keyword:
+                lst_sub_keyword = keyword.split(' ')
+            else:
+                lst_sub_keyword = [keyword]
+
+            lst_keyword_query = [f"product_name ILIKE '%{sub_keyword}%'" for sub_keyword in lst_sub_keyword]
+            where_query += f" {' AND '.join(lst_keyword_query)}"
+            where_query += f") OR"
+        where_query = where_query[:-2]
+        where_query += f")"
+
+    lst_keyword_exclude = filer_report.lst_keyword_exclude
+    if lst_keyword_exclude:
+        lst_keyword_exclude_query = [f"product_name NOT ILIKE '%{keyword}%'" for keyword in lst_keyword_exclude]
+        where_query += f" AND {' AND '.join(lst_keyword_exclude_query)}"
+
+    lst_keyword_required = filer_report.lst_keyword_required
+    if lst_keyword_required:
+        where_query += f" AND ("
+        for keyword in lst_keyword_required:
+            lst_keyword_query = [f"product_name ILIKE '%{sub_keyword}%'" for sub_keyword in [keyword]]
+            where_query += f" {' AND '.join(lst_keyword_query)} OR"
+        where_query = where_query[:-2]
+        where_query += f")"
+
+    price_range = filer_report.price_range
+    if price_range:
+        where_query += f" AND price >= {price_range.begin} AND price <= {price_range.end}"
+
+    select_lst_product_query = f"SELECT p.product_base_id, p.product_name, p.revenue_custom, p.order_custom" \
+                               f" {where_query}" \
+                               f" ORDER BY revenue_custom DESC LIMIT {size_product}"
+    aggs_query = f"""
+        SELECT sum(revenue_custom)                                             AS revenue_total,
+               sum(order_custom)                                               AS order_total,
+               count(distinct product_base_id)                                 AS product_total,
+               count(distinct shop_base_id)                                    AS shop_total,
+               topKWeighted(30, 3, 'counts')(platform, revenue_custom)         AS revenue_by_platform,
+               topKWeighted(30, 3, 'counts')(categories__id_1, revenue_custom) AS revenue_by_categories__id_1,
+               topKWeighted(30, 3, 'counts')(categories__id_2, revenue_custom) AS revenue_by_categories__id_2
+        {where_query}
+    """
+
+    return select_lst_product_query, aggs_query
+
+
+async def fetch_data_keyword(row, client):
     # async for session_metric in get_async_session_metric():
     lst_keyword = row['Từ khóa'].split(',') if isinstance(row['Từ khóa'], str) else []
-    lst_exclude_keyword = default_exclude_keyword
+    lst_exclude_keyword = []
     if type(row['Từ khóa loại trừ']) is str:
         lst_exclude_keyword = row['Từ khóa loại trừ'].split(',')
 
@@ -298,64 +210,121 @@ async def fetch_data_keyword(row):
         is_smart_queries=is_smart_queries,
         lst_category_base_id=lst_shopee_categories + lst_lazada_categories + lst_tiki_categories + lst_tiktok_categories,
         price_range=price_range,
-        is_remove_fake_sale=True
+        is_remove_fake_sale=True,
+        lst_shopee_categories=lst_shopee_categories,
+        lst_lazada_categories=lst_lazada_categories,
+        lst_tiki_categories=lst_tiki_categories,
+        lst_tiktok_categories=lst_tiktok_categories,
     )
 
-    lst_query_es = await _build_es_query_from_filter_report(
+    lst_product_query, aggs_query = build_clickhouse_query(
         filter_report,
         '20230701',
         '20240630',
-        size_product=2_000
+        size_product=1000
     )
 
-    query_es_default = lst_query_es.get('query_es_default')
-    index_name = 'market_current__shopee_vn,market_current__lazada_vn,market_current__tiki_vn,market_current__tiktok_vn'
-    es_session = get_es_metric_session(request_timeout=20)
+    # lst_product, aggs = await asyncio.gather(
+    #     client.query(lst_product_query),
+    #     client.query(aggs_query)
+    # )
+    lst_product = await client.query(lst_product_query)
+    aggs = await client.query(aggs_query)
 
-    # print(json.dumps(query_es_default, ensure_ascii=False))
-    # step 4: query elasticsearch
-    lst_product_revenue_30d_raw, aggs = search_v2(
-        es=es_session,
-        query=query_es_default,
-        index_name=index_name,
-    )
+    # print(lst_product.result_rows)
+    print(aggs.result_rows)
 
-    result_analytic_report = await _tranform_aggs(aggs=aggs)
+    revenue_total = aggs.result_rows[0][0]
+    order_total = aggs.result_rows[0][1]
+    product_total = aggs.result_rows[0][2]
+    shop_total = aggs.result_rows[0][3]
+    revenue_by_platform = aggs.result_rows[0][4]
+    revenue_by_categories__id_1 = aggs.result_rows[0][5]
+    revenue_by_categories__id_2 = aggs.result_rows[0][6]
 
-    # print(json.dumps(result_analytic_report.dict(), ensure_ascii=False))
+    top_10_product = lst_product.result_rows[:10]
+    middle_10_product = lst_product.result_rows[
+                        len(lst_product.result_rows) // 2 - 5: len(lst_product.result_rows) // 2 + 5]
+    bottom_10_product = lst_product.result_rows[-10:]
 
-    by_overview = result_analytic_report.by_overview
-    by_marketplace = result_analytic_report.by_marketplace
-    by_category = result_analytic_report.by_category
+    revenue_by_market_place = ''
+    shopee_revenue = 0
+    lazada_revenue = 0
+    tiki_revenue = 0
+    tiktok_revenue = 0
+    for item in revenue_by_platform:
+        name = item.get('item')
+        revenue = item.get('count')
+        if name == 'shopee':
+            shopee_revenue = revenue
+        if name == 'lazada':
+            lazada_revenue = revenue
+        if name == 'tiki':
+            tiki_revenue = revenue
+        if name == 'tiktok':
+            tiktok_revenue = revenue
+        ratio_revenue = round((revenue / revenue_total) * 100, 2)
+        revenue_by_market_place += f"{name} - {format_text_currency(revenue)} - {ratio_revenue}%\n"
+    revenue_by_market_place = revenue_by_market_place[:-1]
 
-    revenue = by_overview.revenue
-    sale = by_overview.sale
-    product = by_overview.product
-    shop = by_overview.shop
+    lst_shopee_category = [cate for cate in revenue_by_categories__id_2 if cate.get('item', '').startswith('1__')]
+    lst_lazada_category = [cate for cate in revenue_by_categories__id_2 if cate.get('item', '').startswith('2__')]
+    lst_tiki_category = [cate for cate in revenue_by_categories__id_2 if cate.get('item', '').startswith('3__')]
+    lst_tiktok_category = [cate for cate in revenue_by_categories__id_2 if cate.get('item', '').startswith('8__')]
 
-    lst_bee_category = result_analytic_report.by_category.lst_bee_category
-    # by_brand = result_analytic_report.by_brand.lst_top_brand_revenue
-    # by_shop = result_analytic_report.by_shop.lst_top_shop
+    shopee_category_str = ''
+    lazada_category_str = ''
+    tiki_category_str = ''
+    tiktok_category_str = ''
+    map_category_obj = get_map_category_obj()
 
-    top_10_product = lst_product_revenue_30d_raw[:10]
-    middle_10_product = lst_product_revenue_30d_raw[
-                        len(lst_product_revenue_30d_raw) // 2 - 5: len(lst_product_revenue_30d_raw) // 2 + 5]
-    bottom_10_product = lst_product_revenue_30d_raw[-10:]
+    for cate in lst_shopee_category:
+        category_id = cate.get('item')
+        revenue = cate.get('count')
+        category = map_category_obj.get(category_id)
+        ratio_revenue = round((revenue / shopee_revenue) * 100, 2)
+        if category.get('level') == 2:
+            shopee_category_str += f"{category.get('parent_name')}/{category.get('name')} - {format_text_currency(revenue)} - {ratio_revenue}%\n"
+        if category.get('name') == 'Chưa phân loại':
+            shopee_category_str += f"{category.get('name')} - {format_text_currency(revenue)} - {ratio_revenue}%\n"
+    shopee_category_str = shopee_category_str[:-1]
 
-    return {
-        'by_marketplace': by_marketplace,
-        'by_category': by_category,
-        'revenue': revenue,
-        'sale': sale,
-        'product': product,
-        'shop': shop,
-        'lst_bee_category': lst_bee_category,
-        # 'by_brand': by_brand,
-        # 'by_shop': by_shop,
-        'top_10_product': top_10_product,
-        'middle_10_product': middle_10_product,
-        'bottom_10_product': bottom_10_product,
-    }
+    for cate in lst_lazada_category:
+        category_id = cate.get('item')
+        revenue = cate.get('count')
+        category = map_category_obj.get(category_id)
+        ratio_revenue = round((revenue / lazada_revenue) * 100, 2)
+        if category.get('level') == 2:
+            lazada_category_str += f"{category.get('parent_name')}/{category.get('name')} - {format_text_currency(revenue)} - {ratio_revenue}%\n"
+        if category.get('name') == 'Chưa phân loại':
+            lazada_category_str += f"{category.get('name')} - {format_text_currency(revenue)} - {ratio_revenue}%\n"
+    lazada_category_str = lazada_category_str[:-1]
+
+    for cate in lst_tiki_category:
+        category_id = cate.get('item')
+        revenue = cate.get('count')
+        category = map_category_obj.get(category_id)
+        ratio_revenue = round((revenue / tiki_revenue) * 100, 2)
+        if category.get('level') == 2:
+            tiki_category_str += f"{category.get('parent_name')}/{category.get('name')} - {format_text_currency(revenue)} - {ratio_revenue}%\n"
+        if category.get('name') == 'Chưa phân loại':
+            tiki_category_str += f"{category.get('name')} - {format_text_currency(revenue)} - {ratio_revenue}%\n"
+    tiki_category_str = tiki_category_str[:-1]
+
+    for cate in lst_tiktok_category:
+        category_id = cate.get('item')
+        category = map_category_obj.get(category_id)
+        if category.get('level') != 1:
+            continue
+
+        revenue = cate.get('count')
+        ratio_revenue = round((revenue / tiktok_revenue) * 100, 2)
+        tiktok_category_str += f"{category.get('name')} - {format_text_currency(revenue)} - {ratio_revenue}%\n"
+    tiktok_category_str = tiktok_category_str[:-1]
+
+    return revenue_total, order_total, product_total, shop_total, revenue_by_market_place, \
+        top_10_product, middle_10_product, bottom_10_product, shopee_category_str, lazada_category_str, \
+        tiki_category_str, tiktok_category_str
 
 
 def find_category_id_by_label_path(label_path: str, categories_tree: dict):
@@ -395,13 +364,85 @@ def get_categories_from_row(row: Series, platform: str = 'shopee'):
     else:
         lst_category = []
         lst_name = category_cell_value.split('\n')
-        print("lst_name:", lst_name, len(lst_name))
         for name in lst_name:
             category_id = find_category_id_by_label_path(name.strip(), categories_tree)
-            print(category_id)
             if category_id:
                 lst_category.append(category_id)
         return lst_category
+
+
+async def run_by_row(index, row, client):
+    client = await clickhouse_connect.get_async_client(
+        host=clickhouse_config['Host'],
+        port=clickhouse_config['Port'],
+        user=clickhouse_config['User'],
+        password=clickhouse_config['Password']
+    )
+    start_time = datetime.now()
+
+    filter_columns = [
+        'Từ khóa',
+        'Danh mục Shopee',
+        'Danh mục Lazada',
+        'Danh mục Tiki',
+        'Danh mục Tiktok',
+        'Từ khóa loại trừ',
+        'Từ khóa cộng',
+        'Chế độ tìm',
+        'Giá min',
+        'Giá max',
+    ]
+    filter_as_str = ''
+    for col in filter_columns:
+        filter_as_str += f"{row[col]}"
+
+    key_filter_report = text_to_hash_md5(filter_as_str)
+    key_response_report = row['Key']
+    print('key', key_filter_report, key_response_report)
+    # if key_filter_report == key_response_report:
+    #     print(f"- IGNORE Bộ lọc không thay đổi, bỏ qua {row['Từ khóa']} \n")
+    #     continue
+
+    print(f"- START lấy dữ liệu  từ khóa: {row['Từ khóa']}, dòng số: {index + 1}")
+    query_data_num = row['Lần query data']
+    if math.isnan(query_data_num):
+        query_data_num = 0
+
+    revenue_total, order_total, product_total, shop_total, \
+        revenue_by_market_place, top_10_product, middle_10_product, \
+        bottom_10_product, shopee_category_str, lazada_category_str, \
+        tiki_category_str, tiktok_category_str = await fetch_data_keyword(row, client)
+
+    row['Lần query data'] = query_data_num + 1
+    row['Key'] = key_filter_report
+    row['Doanh số từng sàn'] = revenue_by_market_place
+    row['Doanh số'] = revenue_total
+    row['Sản lượng'] = order_total
+    row['Sản phẩm có lượt bán'] = product_total
+    row['Số shop'] = shop_total
+    row['Ngành hàng Shopee'] = shopee_category_str
+    row['Ngành hàng Lazada'] = lazada_category_str
+    row['Ngành hàng Tiki'] = tiki_category_str
+    row['Ngành hàng Tiktok'] = tiktok_category_str
+
+    lst_product_name_str = ''
+    for product in top_10_product:
+        revenue = product[2]
+        order_count = '{:,.0f}'.format(product[3], 0)
+        lst_product_name_str += f"{product[1]} - doanh số:{format_text_currency(revenue)}, sản lượng: {order_count}\n"
+    for product in middle_10_product:
+        revenue = product[2]
+        order_count = '{:,.0f}'.format(product[3], 0)
+        lst_product_name_str += f"{product[1]} - doanh số:{format_text_currency(revenue)}, sản lượng: {order_count}\n"
+    for product in bottom_10_product:
+        revenue = product[2]
+        order_count = '{:,.0f}'.format(product[3], 0)
+        lst_product_name_str += f"{product[1]} - doanh số:{format_text_currency(revenue)}, sản lượng: {order_count}\n"
+
+    row['Product name'] = lst_product_name_str[:-1]
+    print(f"- DONE query từ khóa: {row['Từ khóa']} {index + 1} trong {datetime.now() - start_time}")
+
+    return index, row
 
 
 async def run():
@@ -410,133 +451,21 @@ async def run():
 
     df = load_query_dataframe(input_file_path, 'Sheet1')
 
-    for index, row in df.iterrows():
+    batch_size = 10
+
+    for i in range(0, len(df), batch_size):
         start_time = datetime.now()
+        df_batch = df[i:i + batch_size]
 
-        filter_columns = [
-            'Từ khóa',
-            'Danh mục Shopee',
-            'Danh mục Lazada',
-            'Danh mục Tiki',
-            'Danh mục Tiktok',
-            'Từ khóa loại trừ',
-            'Từ khóa cộng',
-            'Chế độ tìm',
-            'Giá min',
-            'Giá max',
-        ]
-        filter_as_str = ''
-        for col in filter_columns:
-            filter_as_str += f"{row[col]}"
+        tasks = [run_by_row(index, row, None) for index, row in df_batch.iterrows()]
+        results = await asyncio.gather(*tasks)
 
-        key_filter_report = text_to_hash_md5(filter_as_str)
-        key_response_report = row['Key']
-        print('key', key_filter_report, key_response_report)
-        if key_filter_report == key_response_report:
-            print(f"- IGNORE Bộ lọc không thay đổi, bỏ qua {row['Từ khóa']} \n")
-            continue
+        for index, row in results:
+            df.loc[index] = row
 
-        print(f"- START query từ khóa: {row['Từ khóa']} {index + 1}/{len(df)}")
-        query_data_num = row['Lần query data']
-        if math.isnan(query_data_num):
-            query_data_num = 0
+        print(f"Time to process batch {i + 1}-{i + batch_size}: {datetime.now() - start_time}")
 
-        report_response = await fetch_data_keyword(row)
-        by_marketplace = report_response.get('by_marketplace')
-        by_category = report_response.get('by_category')
-        lst_shopee_category = by_category.lst_shopee_category or []
-        lst_lazada_category = by_category.lst_lazada_category or []
-        lst_tiki_category = by_category.lst_tiki_category or []
-        lst_tiktok_category = by_category.lst_tiktok_category or []
-
-        revenue = report_response.get('revenue')
-        sale = report_response.get('sale')
-        product = report_response.get('product')
-        shop = report_response.get('shop')
-        lst_bee_category = report_response.get('lst_bee_category')[:10]
-        top_10_product = report_response.get('top_10_product')
-        middle_10_product = report_response.get('middle_10_product')
-        bottom_10_product = report_response.get('bottom_10_product')
-
-        revenue_by_market_place = ''
-        for item in by_marketplace.lst_marketplace:
-            ratio_revenue = round(item.ratio_revenue * 100, 2)
-            revenue_by_market_place += f"{item.name} - {ratio_revenue}%\n"
-        revenue_by_market_place = revenue_by_market_place[:-1]
-
-        shopee_category_str = ''
-        for category in lst_shopee_category:
-            if category.level == 2:
-                ratio_revenue = round(category.ratio_revenue * 100, 2)
-                shopee_category_str += f"{category.parent_name}/{category.name} - {ratio_revenue}%\n"
-            if category.name == 'Chưa phân loại':
-                ratio_revenue = round(category.ratio_revenue * 100, 2)
-                shopee_category_str += f"{category.name} - {ratio_revenue}%\n"
-        shopee_category_str = shopee_category_str[:-1]
-
-        lazada_category_str = ''
-        for category in lst_lazada_category:
-            if category.level == 2:
-                ratio_revenue = round(category.ratio_revenue * 100, 2)
-                lazada_category_str += f"{category.parent_name}/{category.name} - {ratio_revenue}%\n"
-            if category.name == 'Chưa phân loại':
-                ratio_revenue = round(category.ratio_revenue * 100, 2)
-                lazada_category_str += f"{category.name} - {ratio_revenue}%\n"
-        lazada_category_str = lazada_category_str[:-1]
-
-        tiki_category_str = ''
-        for category in lst_tiki_category:
-            if category.level == 2:
-                ratio_revenue = round(category.ratio_revenue * 100, 2)
-                tiki_category_str += f"{category.parent_name}/{category.name} - {ratio_revenue}%\n"
-            if category.name == 'Chưa phân loại':
-                ratio_revenue = round(category.ratio_revenue * 100, 2)
-                tiki_category_str += f"{category.name} - {ratio_revenue}%\n"
-        tiki_category_str = tiki_category_str[:-1]
-
-        tiktok_category_str = ''
-        for category in lst_tiktok_category:
-            if category.level != 1:
-                continue
-            ratio_revenue = round(category.ratio_revenue * 100, 2)
-            tiktok_category_str += f"{category.name} - {ratio_revenue}%\n"
-        tiktok_category_str = tiktok_category_str[:-1]
-
-        # bee_category_str = ''
-        # for category in lst_bee_category:
-        #     ratio_revenue = round(category.ratio_revenue * 100, 2)
-        #     bee_category_str += f"{category.parent_name}/{category.name} - {ratio_revenue}%\n"
-        # bee_category_str = bee_category_str[:-1]
-
-        row['Lần query data'] = query_data_num + 1
-        row['Key'] = key_filter_report
-        row['Doanh số từng sàn'] = revenue_by_market_place
-        row['Doanh số'] = revenue
-        row['Sản lượng'] = sale
-        row['Sản phẩm có lượt bán'] = product
-        row['Số shop'] = shop
-        row['Ngành hàng Shopee'] = shopee_category_str
-        row['Ngành hàng Lazada'] = lazada_category_str
-        row['Ngành hàng Tiki'] = tiki_category_str
-        row['Ngành hàng Tiktok'] = tiktok_category_str
-
-        # row['Ngành hàng'] = bee_category_str
-
-        lst_product_name_str = ''
-        for product in top_10_product:
-            lst_product_name_str += f"{product.get('product_name')}\n"
-        for product in middle_10_product:
-            lst_product_name_str += f"{product.get('product_name')}\n"
-        for product in bottom_10_product:
-            lst_product_name_str += f"{product.get('product_name')}\n"
-
-        row['Product name'] = lst_product_name_str[:-1]
-
-        df.loc[index] = row
-
-        df.to_excel(input_file_path, index=False)
-
-        print(f"DONE {index + 1}/{len(df)} trong {datetime.now() - start_time} \n")
+    df.to_excel(input_file_path, index=False)
 
 
 if __name__ == '__main__':
