@@ -115,6 +115,9 @@ def build_clickhouse_query(filer_report):
     price_range = filer_report.price_range
     if price_range:
         where_query += f" AND price >= {price_range.begin} AND price <= {price_range.end}"
+
+    if where_query.startswith(" AND "):
+        where_query = where_query[5:]
     return where_query
 
 
@@ -487,12 +490,13 @@ def build_multiple_row_data_query(index, df_batch, start_date, end_date):
 
 
 def run():
-    input_file_path = f'{ROOT_DIR}/Danh sách báo cáo e-report.xlsx'
-    input_file_path = f'/Users/tienbm/Downloads/danh sách báo cáo thời trang nữ.xlsx'
+    # input_file_path = f'{ROOT_DIR}/Danh sách báo cáo e-report.xlsx'
+    # input_file_path = f'/Users/tienbm/Downloads/danh sách báo cáo thời trang nữ (1).xlsx'
+    input_file_path = f'/Users/tienbm/Downloads/eReport_TTN_map_cat.xlsx'
     df = load_query_dataframe(input_file_path, 'Sheet1')
     pd.options.mode.copy_on_write = True
     # batch_size = 1
-    batch_size = 200
+    batch_size = 2
 
     import clickhouse_connect
 
@@ -514,6 +518,7 @@ def run():
         if not query:
             continue
 
+        print(query)
         aggs = client.query(query)
 
         result = aggs.result_rows[0]
