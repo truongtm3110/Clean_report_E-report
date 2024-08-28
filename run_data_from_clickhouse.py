@@ -1,23 +1,16 @@
-import asyncio
 import json
+import os
 import re
+from datetime import datetime
 
 import math
-import os
-from datetime import datetime
-from typing import AsyncGenerator
-
 import pandas as pd
-from dateutil.relativedelta import relativedelta
 from pandas import Series
 
 from app.constant.constant_metric import get_map_category_obj
-from app.db.session_es_metric import get_es_metric_session
-from helper.elasticsearch7_helper import search_v2
 from helper.logger_helper import LoggerSimple
 from helper.text_hash_helper import text_to_hash_md5
-from schedule.report_service.build_es_query_service import build_query_es_from_api, get_aggs_runtime_mapping_es, \
-    FilterReport, Range
+from schedule.report_service.build_es_query_service import FilterReport, Range
 
 clickhouse_config = {
     'Host': 'sv7.beecost.net',
@@ -108,176 +101,18 @@ def build_clickhouse_query(filer_report):
         where_query += f" AND ("
         for keyword in lst_keyword_required:
             lst_keyword_query = [f"product_name ILIKE '%{sub_keyword}%'" for sub_keyword in [keyword]]
-            where_query += f" {' AND '.join(lst_keyword_query)} OR"
-        where_query = where_query[:-2]
+            where_query += f" {' AND '.join(lst_keyword_query)} AND"
+        where_query = where_query[:-3]
         where_query += f")"
 
     price_range = filer_report.price_range
     if price_range:
         where_query += f" AND price >= {price_range.begin} AND price <= {price_range.end}"
 
+    print(where_query)
     if where_query.startswith(" AND "):
         where_query = where_query[5:]
     return where_query
-
-
-def fetch_data_keyword(row, client):
-    lst_keyword = row['Từ khóa'].split(',') if isinstance(row['Từ khóa'], str) else []
-    lst_exclude_keyword = []
-    if type(row['Từ khóa loại trừ']) is str:
-        lst_exclude_keyword = row['Từ khóa loại trừ'].split(',')
-
-    lst_keyword_required = []
-    if type(row['Từ khóa cộng']) is str:
-        lst_keyword_required = row['Từ khóa cộng'].split(',')
-
-    is_smart_queries = True if row['Chế độ tìm'] == 'Tìm thông minh' else False
-    price_min = row['Giá min'] if not math.isnan(row['Giá min']) else None
-    price_max = row['Giá max'] if not math.isnan(row['Giá max']) else None
-
-    lst_shopee_categories = get_categories_from_row(row, 'shopee')
-    lst_lazada_categories = get_categories_from_row(row, 'lazada')
-    lst_tiki_categories = get_categories_from_row(row, 'tiki')
-    lst_tiktok_categories = get_categories_from_row(row, 'tiktok')
-
-    price_range = None
-    if price_min or price_max:
-        price_range = Range(
-            begin=price_min,
-            end=price_max
-        )
-
-    filter_report = FilterReport(
-        lst_platform_id=[1, 2, 3, 8],
-        lst_keyword_exclude=lst_exclude_keyword,
-        lst_keyword_required=lst_keyword_required,
-        lst_keyword=lst_keyword,
-        is_smart_queries=is_smart_queries,
-        lst_category_base_id=lst_shopee_categories + lst_lazada_categories + lst_tiki_categories + lst_tiktok_categories,
-        price_range=price_range,
-        is_remove_fake_sale=True,
-        lst_shopee_categories=lst_shopee_categories,
-        lst_lazada_categories=lst_lazada_categories,
-        lst_tiki_categories=lst_tiki_categories,
-        lst_tiktok_categories=lst_tiktok_categories,
-    )
-
-    where_query = build_clickhouse_query(
-        filter_report,
-        '20230701',
-        '20240630',
-        size_product=500
-    )
-
-    return
-
-    # lst_product, aggs = await asyncio.gather(
-    #     client.query(lst_product_query),
-    #     client.query(aggs_query)
-    # )
-    lst_product = client.query(lst_product_query)
-    aggs = client.query(aggs_query)
-
-    # print(lst_product.result_rows)
-    # print(aggs.result_rows)
-
-    revenue_total = aggs.result_rows[0][0]
-    order_total = aggs.result_rows[0][1]
-    product_total = aggs.result_rows[0][2]
-    shop_total = aggs.result_rows[0][3]
-    revenue_by_platform = aggs.result_rows[0][4]
-    revenue_by_categories__id_1 = aggs.result_rows[0][5]
-    revenue_by_categories__id_2 = aggs.result_rows[0][6]
-
-    top_10_product = lst_product.result_rows[:10]
-    middle_10_product = lst_product.result_rows[
-                        len(lst_product.result_rows) // 2 - 5: len(lst_product.result_rows) // 2 + 5]
-    bottom_10_product = lst_product.result_rows[-10:]
-
-    revenue_by_market_place = ''
-    shopee_revenue = 0
-    lazada_revenue = 0
-    tiki_revenue = 0
-    tiktok_revenue = 0
-    for item in revenue_by_platform:
-        name = item.get('item')
-        revenue = item.get('count')
-        if name == 'shopee':
-            shopee_revenue = revenue
-        if name == 'lazada':
-            lazada_revenue = revenue
-        if name == 'tiki':
-            tiki_revenue = revenue
-        if name == 'tiktok':
-            tiktok_revenue = revenue
-        ratio_revenue = round((revenue / revenue_total) * 100, 2)
-        revenue_by_market_place += f"{name} - {format_text_currency(revenue)} - {ratio_revenue}%\n"
-    revenue_by_market_place = revenue_by_market_place[:-1]
-
-    lst_shopee_category = [cate for cate in revenue_by_categories__id_2 if cate.get('item', '').startswith('1__')]
-    lst_lazada_category = [cate for cate in revenue_by_categories__id_2 if cate.get('item', '').startswith('2__')]
-    lst_tiki_category = [cate for cate in revenue_by_categories__id_2 if cate.get('item', '').startswith('3__')]
-    lst_tiktok_category = [cate for cate in revenue_by_categories__id_2 if cate.get('item', '').startswith('8__')]
-
-    shopee_category_str = ''
-    lazada_category_str = ''
-    tiki_category_str = ''
-    tiktok_category_str = ''
-    map_category_obj = get_map_category_obj()
-
-    for cate in lst_shopee_category:
-        category_id = cate.get('item')
-        revenue = cate.get('count')
-        category = map_category_obj.get(category_id)
-        ratio_revenue = round((revenue / shopee_revenue) * 100, 2)
-        if ratio_revenue < 1:
-            continue
-        if category.get('level') == 2:
-            shopee_category_str += f"{category.get('parent_name')}/{category.get('label')} - {format_text_currency(revenue)} - {ratio_revenue}%\n"
-        if category.get('label') == 'Chưa phân loại':
-            shopee_category_str += f"{category.get('label')} - {format_text_currency(revenue)} - {ratio_revenue}%\n"
-    shopee_category_str = shopee_category_str[:-1]
-
-    for cate in lst_lazada_category:
-        category_id = cate.get('item')
-        revenue = cate.get('count')
-        category = map_category_obj.get(category_id)
-        ratio_revenue = round((revenue / lazada_revenue) * 100, 2)
-        if ratio_revenue < 1:
-            continue
-        if category.get('level') == 2:
-            lazada_category_str += f"{category.get('parent_name')}/{category.get('label')} - {format_text_currency(revenue)} - {ratio_revenue}%\n"
-        if category.get('label') == 'Chưa phân loại':
-            lazada_category_str += f"{category.get('label')} - {format_text_currency(revenue)} - {ratio_revenue}%\n"
-    lazada_category_str = lazada_category_str[:-1]
-
-    for cate in lst_tiki_category:
-        category_id = cate.get('item')
-        revenue = cate.get('count')
-        category = map_category_obj.get(category_id)
-        ratio_revenue = round((revenue / tiki_revenue) * 100, 2)
-        if ratio_revenue < 1:
-            continue
-        if category.get('level') == 2:
-            tiki_category_str += f"{category.get('parent_name')}/{category.get('label')} - {format_text_currency(revenue)} - {ratio_revenue}%\n"
-        if category.get('label') == 'Chưa phân loại':
-            tiki_category_str += f"{category.get('label')} - {format_text_currency(revenue)} - {ratio_revenue}%\n"
-    tiki_category_str = tiki_category_str[:-1]
-
-    for cate in lst_tiktok_category:
-        category_id = cate.get('item')
-        category = map_category_obj.get(category_id)
-        if category.get('level') != 1:
-            continue
-
-        revenue = cate.get('count')
-        ratio_revenue = round((revenue / tiktok_revenue) * 100, 2)
-        tiktok_category_str += f"{category.get('label')} - {format_text_currency(revenue)} - {ratio_revenue}%\n"
-    tiktok_category_str = tiktok_category_str[:-1]
-
-    return revenue_total, order_total, product_total, shop_total, revenue_by_market_place, \
-        top_10_product, middle_10_product, bottom_10_product, shopee_category_str, lazada_category_str, \
-        tiki_category_str, tiktok_category_str
 
 
 def find_category_id_by_label_path(label_path: str, categories_tree: dict):
@@ -376,14 +211,17 @@ def build_multiple_row_data_query(index, df_batch, start_date, end_date):
 
         has_change_filter = key_filter_report != key_response_report
 
-        lst_keyword = row['Từ khóa'].split(',') if isinstance(row['Từ khóa'], str) else []
+        lst_keyword = []
+        if type(row['Từ khóa']) is str:
+            lst_keyword = [keyword.strip() for keyword in row['Từ khóa'].split(',')]
+
         lst_exclude_keyword = []
         if type(row['Từ khóa loại trừ']) is str:
-            lst_exclude_keyword = row['Từ khóa loại trừ'].split(',')
+            lst_exclude_keyword = [keyword.strip() for keyword in row['Từ khóa loại trừ'].split(',')]
 
         lst_keyword_required = []
         if type(row['Từ khóa cộng']) is str:
-            lst_keyword_required = row['Từ khóa cộng'].split(',')
+            lst_keyword_required = [keyword.strip() for keyword in row['Từ khóa cộng'].split(',')]
 
         is_smart_queries = True if row['Chế độ tìm'] == 'Tìm thông minh' else False
         price_min = row['Giá min'] if not math.isnan(row['Giá min']) else None
@@ -430,6 +268,7 @@ def build_multiple_row_data_query(index, df_batch, start_date, end_date):
             aggs_query += f"""
                 ('', '', '', '', '', '', '') as report_{idx},"""
 
+    # print(where_query)
     start_date = datetime.strptime(start_date, '%Y%m%d').strftime('%Y-%m-%d')
     end_date = datetime.strptime(end_date, '%Y%m%d').strftime('%Y-%m-%d')
     aggs_query = aggs_query[:-1]
@@ -492,11 +331,11 @@ def build_multiple_row_data_query(index, df_batch, start_date, end_date):
 def run():
     # input_file_path = f'{ROOT_DIR}/Danh sách báo cáo e-report.xlsx'
     # input_file_path = f'/Users/tienbm/Downloads/danh sách báo cáo thời trang nữ (1).xlsx'
-    input_file_path = f'/Users/tienbm/Downloads/eReport_TTN_map_cat.xlsx'
+    input_file_path = f'/Users/tienbm/Downloads/eReport_TTN_map_cat (1).xlsx'
     df = load_query_dataframe(input_file_path, 'Sheet1')
     pd.options.mode.copy_on_write = True
     # batch_size = 1
-    batch_size = 2
+    batch_size = 100
 
     import clickhouse_connect
 
