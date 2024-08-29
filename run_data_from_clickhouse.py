@@ -485,7 +485,8 @@ def run():
             tiktok_category_str = tiktok_category_str[:-1]
 
             lst_product_name_str = ''
-            for product in top_10_product + middle_10_product + bottom_10_product:
+            # for product in top_10_product + middle_10_product + bottom_10_product:
+            for product in top_10_product:
                 lst_product_name_str += f"{product}\n"
 
             lst_product_name_str = lst_product_name_str[:-1]
