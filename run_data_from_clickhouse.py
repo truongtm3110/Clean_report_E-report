@@ -146,6 +146,7 @@ def get_categories_from_row(row: Series, platform: str = 'shopee'):
     if type(category_cell_value) is not str:
         return []
     if category_cell_value == 'Tất cả':
+        return []
         return [category['value'] for category in categories_tree]
     elif category_cell_value.strip() == 'Không lấy dữ liệu':
         return []
@@ -360,6 +361,7 @@ def run():
             continue
 
         # print(query)
+        # exit()
         aggs = client.query(query)
 
         result = aggs.result_rows[0]
