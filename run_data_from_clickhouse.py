@@ -263,7 +263,8 @@ def build_multiple_row_data_query(index, df_batch, start_date, end_date):
                 countIf(distinct shop_base_id, {where_query}),
                 topKWeightedIf(30, 3, 'counts')(platform, revenue_custom, {where_query}),
                 topKWeightedIf(30, 3, 'counts')(categories__id_2, revenue_custom, {where_query}),
-                topKWeightedIf(500, 3, 'counts')(product_name, revenue_custom, {where_query})) as report_{idx},"""
+                topKWeightedIf(500, 3, 'counts')(product_name, revenue_custom, {where_query}),
+                topKWeightedIf(30, 3, 'counts')(categories__id_1, revenue_custom, {where_query})) as report_{idx},"""
         else:
             aggs_query += f"""
                 ('', '', '', '', '', '', '') as report_{idx},"""
@@ -375,6 +376,7 @@ def run():
             revenue_by_platform = result_row[4]
             revenue_by_categories__id_2 = result_row[5]
             lst_product = result_row[6]
+            revenue_by_categories__id_1 = result_row[7]
 
             top_10_product = [p.get('item') for p in lst_product[:10]]
             middle_10_product = [p.get('item') for p in
@@ -409,6 +411,15 @@ def run():
             lst_tiktok_category = [cate for cate in revenue_by_categories__id_2 if
                                    cate.get('item', '').startswith('8__')]
 
+            lst_shopee_category += [cate for cate in revenue_by_categories__id_1 if
+                                    cate.get('item', '').startswith('1__')]
+            lst_lazada_category += [cate for cate in revenue_by_categories__id_1 if
+                                    cate.get('item', '').startswith('2__')]
+            lst_tiki_category += [cate for cate in revenue_by_categories__id_1 if
+                                  cate.get('item', '').startswith('3__')]
+            lst_tiktok_category += [cate for cate in revenue_by_categories__id_1 if
+                                    cate.get('item', '').startswith('8__')]
+
             shopee_category_str = ''
             lazada_category_str = ''
             tiki_category_str = ''
@@ -419,46 +430,52 @@ def run():
                 category_id = cate.get('item')
                 revenue = cate.get('count')
                 category = map_category_obj.get(category_id)
+                if not category:
+                    continue
                 ratio_revenue = round((revenue / shopee_revenue) * 100, 2)
                 if ratio_revenue < 1:
                     continue
-                if category.get('level') == 2:
-                    shopee_category_str += f"{category.get('parent_name')}/{category.get('label')} - {format_text_currency(revenue)} - {ratio_revenue}%\n"
                 if category.get('label') == 'Chưa phân loại':
                     shopee_category_str += f"{category.get('label')} - {format_text_currency(revenue)} - {ratio_revenue}%\n"
+                if category.get('level') == 2:
+                    shopee_category_str += f"{category.get('parent_name')}/{category.get('label')} - {format_text_currency(revenue)} - {ratio_revenue}%\n"
             shopee_category_str = shopee_category_str[:-1]
 
             for cate in lst_lazada_category:
                 category_id = cate.get('item')
                 revenue = cate.get('count')
                 category = map_category_obj.get(category_id)
+                if not category:
+                    continue
                 ratio_revenue = round((revenue / lazada_revenue) * 100, 2)
                 if ratio_revenue < 1:
                     continue
-                if category.get('level') == 2:
-                    lazada_category_str += f"{category.get('parent_name')}/{category.get('label')} - {format_text_currency(revenue)} - {ratio_revenue}%\n"
                 if category.get('label') == 'Chưa phân loại':
                     lazada_category_str += f"{category.get('label')} - {format_text_currency(revenue)} - {ratio_revenue}%\n"
+                if category.get('level') == 2:
+                    lazada_category_str += f"{category.get('parent_name')}/{category.get('label')} - {format_text_currency(revenue)} - {ratio_revenue}%\n"
             lazada_category_str = lazada_category_str[:-1]
 
             for cate in lst_tiki_category:
                 category_id = cate.get('item')
                 revenue = cate.get('count')
                 category = map_category_obj.get(category_id)
+                if not category:
+                    continue
                 ratio_revenue = round((revenue / tiki_revenue) * 100, 2)
                 if ratio_revenue < 1:
                     continue
-                if not category:
-                    continue
-                if category.get('level') == 2:
-                    tiki_category_str += f"{category.get('parent_name')}/{category.get('label')} - {format_text_currency(revenue)} - {ratio_revenue}%\n"
                 if category.get('label') == 'Chưa phân loại':
                     tiki_category_str += f"{category.get('label')} - {format_text_currency(revenue)} - {ratio_revenue}%\n"
+                if category.get('level') == 2:
+                    tiki_category_str += f"{category.get('parent_name')}/{category.get('label')} - {format_text_currency(revenue)} - {ratio_revenue}%\n"
             tiki_category_str = tiki_category_str[:-1]
 
             for cate in lst_tiktok_category:
                 category_id = cate.get('item')
                 category = map_category_obj.get(category_id)
+                if not category:
+                    continue
                 if category.get('level') != 1:
                     continue
 
