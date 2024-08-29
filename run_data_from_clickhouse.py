@@ -66,18 +66,18 @@ def build_clickhouse_query(filer_report):
     where_query = ""
 
     lst_category_base_id = filer_report.lst_category_base_id
-    # if lst_category_base_id:
-    #     where_query += f" ("
-    #     where_query += f" categories__id_1 IN {tuple(lst_category_base_id)} "
-    #     where_query += f" OR categories__id_2 IN {tuple(lst_category_base_id)} "
-    #     where_query += f" OR categories__id_3 IN {tuple(lst_category_base_id)} "
-    #     where_query += f" OR categories__id_4 IN {tuple(lst_category_base_id)} "
-    #     where_query += f" OR categories__id_5 IN {tuple(lst_category_base_id)} "
-    #     where_query += f")"
+    if lst_category_base_id:
+        where_query += f" AND ("
+        where_query += f" categories__id_1 IN {tuple(lst_category_base_id)} "
+        where_query += f" OR categories__id_2 IN {tuple(lst_category_base_id)} "
+        where_query += f" OR categories__id_3 IN {tuple(lst_category_base_id)} "
+        where_query += f" OR categories__id_4 IN {tuple(lst_category_base_id)} "
+        where_query += f" OR categories__id_5 IN {tuple(lst_category_base_id)} "
+        where_query += f")"
 
     is_split_keyword = filer_report.is_smart_queries
     if filer_report.lst_keyword:
-        where_query += f" ("
+        where_query += f" AND ("
         for keyword in filer_report.lst_keyword:
             where_query += f"("
             if is_split_keyword:
@@ -209,6 +209,7 @@ def build_multiple_row_data_query(index, df_batch, start_date, end_date):
         key_filter_report = text_to_hash_md5(filter_as_str)
         key_response_report = row['Key']
 
+        # has_change_filter = True
         has_change_filter = key_filter_report != key_response_report
 
         lst_keyword = []
@@ -332,7 +333,7 @@ def build_multiple_row_data_query(index, df_batch, start_date, end_date):
 def run():
     input_file_path = f'{ROOT_DIR}/top_volume_product.xlsx'
     # input_file_path = f'/Users/tienbm/Downloads/danh sách báo cáo thời trang nữ (1).xlsx'
-    # input_file_path = f'/Users/tienbm/Downloads/eReport_TTN_map_cat (1).xlsx'
+    # input_file_path = f'/Users/tienbm/Downloads/eReport -TTN-clean_cate_1 (1).xlsx'
     df = load_query_dataframe(input_file_path, 'Sheet1')
     pd.options.mode.copy_on_write = True
     # batch_size = 1
@@ -364,6 +365,7 @@ def run():
         result = aggs.result_rows[0]
 
         for idx, result_row in zip(range(i, i + batch_size), result):
+            # print('keyword', df.loc[idx, 'name'])
             if not result_row:
                 # print(f"Row {idx} is empty")
                 continue
@@ -525,6 +527,7 @@ def run():
         print(f"Time to process batch {i + 1}-{i + batch_size}: {datetime.now() - start_time}")
         df = df.map(sanitize_excel_string)
         df.to_excel(input_file_path, index=False)
+        # exit()
 
 
 if __name__ == '__main__':
