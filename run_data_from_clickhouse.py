@@ -330,7 +330,7 @@ def build_multiple_row_data_query(index, df_batch, start_date, end_date):
 
 
 def run():
-    input_file_path = f'{ROOT_DIR}/eReport_TTN_map_cat.xlsx'
+    input_file_path = f'{ROOT_DIR}/top_volume_product.xlsx'
     # input_file_path = f'/Users/tienbm/Downloads/danh sách báo cáo thời trang nữ (1).xlsx'
     # input_file_path = f'/Users/tienbm/Downloads/eReport_TTN_map_cat (1).xlsx'
     df = load_query_dataframe(input_file_path, 'Sheet1')
@@ -378,10 +378,10 @@ def run():
             lst_product = result_row[6]
             revenue_by_categories__id_1 = result_row[7]
 
-            top_10_product = [p.get('item') for p in lst_product[:10]]
-            middle_10_product = [p.get('item') for p in
-                                 lst_product[len(lst_product) // 2 - 5: len(lst_product) // 2 + 5]]
-            bottom_10_product = [p.get('item') for p in lst_product[-10:]]
+            top_10_product = [p.get('item') for p in lst_product[:50]]
+            # middle_10_product = [p.get('item') for p in
+            #                      lst_product[len(lst_product) // 2 - 5: len(lst_product) // 2 + 5]]
+            # bottom_10_product = [p.get('item') for p in lst_product[-10:]]
 
             revenue_by_market_place = ''
             shopee_revenue = 0
