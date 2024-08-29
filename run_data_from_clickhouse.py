@@ -109,7 +109,7 @@ def build_clickhouse_query(filer_report):
     if price_range:
         where_query += f" AND price >= {price_range.begin} AND price <= {price_range.end}"
 
-    print(where_query)
+    # print(where_query)
     if where_query.startswith(" AND "):
         where_query = where_query[5:]
     return where_query
@@ -329,9 +329,9 @@ def build_multiple_row_data_query(index, df_batch, start_date, end_date):
 
 
 def run():
-    # input_file_path = f'{ROOT_DIR}/Danh sách báo cáo e-report.xlsx'
+    input_file_path = f'{ROOT_DIR}/eReport_TTN_map_cat.xlsx'
     # input_file_path = f'/Users/tienbm/Downloads/danh sách báo cáo thời trang nữ (1).xlsx'
-    input_file_path = f'/Users/tienbm/Downloads/eReport_TTN_map_cat (1).xlsx'
+    # input_file_path = f'/Users/tienbm/Downloads/eReport_TTN_map_cat (1).xlsx'
     df = load_query_dataframe(input_file_path, 'Sheet1')
     pd.options.mode.copy_on_write = True
     # batch_size = 1
@@ -357,14 +357,14 @@ def run():
         if not query:
             continue
 
-        print(query)
+        # print(query)
         aggs = client.query(query)
 
         result = aggs.result_rows[0]
 
         for idx, result_row in zip(range(i, i + batch_size), result):
             if not result_row:
-                print(f"Row {idx} is empty")
+                # print(f"Row {idx} is empty")
                 continue
             revenue_total = result_row[0]
             if not revenue_total:
