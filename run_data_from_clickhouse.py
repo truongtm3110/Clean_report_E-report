@@ -65,15 +65,55 @@ def load_query_dataframe(file_path: str, sheet_name: str = None) -> pd.DataFrame
 def build_clickhouse_query(filer_report):
     where_query = ""
 
-    lst_category_base_id = filer_report.lst_category_base_id
-    if lst_category_base_id:
+    # lst_category_base_id = filer_report.lst_category_base_id
+    # if lst_category_base_id:
+    #     where_query += f" AND ("
+    #     where_query += f" categories__id_1 IN {tuple(lst_category_base_id)} "
+    #     where_query += f" OR categories__id_2 IN {tuple(lst_category_base_id)} "
+    #     where_query += f" OR categories__id_3 IN {tuple(lst_category_base_id)} "
+    #     where_query += f" OR categories__id_4 IN {tuple(lst_category_base_id)} "
+    #     where_query += f" OR categories__id_5 IN {tuple(lst_category_base_id)} "
+    #     where_query += f")"
+
+    lst_shopee_categories = filer_report.lst_shopee_categories
+    if lst_shopee_categories:
+        where_query += f" OR (platform_id = 1"
         where_query += f" AND ("
-        where_query += f" categories__id_1 IN {tuple(lst_category_base_id)} "
-        where_query += f" OR categories__id_2 IN {tuple(lst_category_base_id)} "
-        where_query += f" OR categories__id_3 IN {tuple(lst_category_base_id)} "
-        where_query += f" OR categories__id_4 IN {tuple(lst_category_base_id)} "
-        where_query += f" OR categories__id_5 IN {tuple(lst_category_base_id)} "
-        where_query += f")"
+        where_query += f" categories__id_1 IN {tuple(lst_shopee_categories)} "
+        where_query += f" OR categories__id_2 IN {tuple(lst_shopee_categories)} "
+        where_query += f"))"
+    else:
+        where_query += f" OR (platform_id = 1)"
+
+    lst_lazada_categories = filer_report.lst_lazada_categories
+    if lst_lazada_categories:
+        where_query += f" OR (platform_id = 2"
+        where_query += f" AND ("
+        where_query += f" categories__id_1 IN {tuple(lst_lazada_categories)} "
+        where_query += f" OR categories__id_2 IN {tuple(lst_lazada_categories)} "
+        where_query += f"))"
+    else:
+        where_query += f" OR (platform_id = 2)"
+
+    lst_tiki_categories = filer_report.lst_tiki_categories
+    if lst_tiki_categories:
+        where_query += f" OR (platform_id = 3"
+        where_query += f" AND ("
+        where_query += f" categories__id_1 IN {tuple(lst_tiki_categories)} "
+        where_query += f" OR categories__id_2 IN {tuple(lst_tiki_categories)} "
+        where_query += f"))"
+    else:
+        where_query += f" OR (platform_id = 3)"
+
+    lst_tiktok_categories = filer_report.lst_tiktok_categories
+    if lst_tiktok_categories:
+        where_query += f" OR (platform_id = 8"
+        where_query += f" AND ("
+        where_query += f" categories__id_1 IN {tuple(lst_tiktok_categories)} "
+        where_query += f" OR categories__id_2 IN {tuple(lst_tiktok_categories)} "
+        where_query += f"))"
+    else:
+        where_query += f" OR (platform_id = 8)"
 
     is_split_keyword = filer_report.is_smart_queries
     if filer_report.lst_keyword:
@@ -109,9 +149,12 @@ def build_clickhouse_query(filer_report):
     if price_range:
         where_query += f" AND price >= {price_range.begin} AND price <= {price_range.end}"
 
-    # print(where_query)
     if where_query.startswith(" AND "):
         where_query = where_query[5:]
+
+    if where_query.startswith(" OR "):
+        where_query = where_query[4:]
+    # print(where_query)
     return where_query
 
 
@@ -334,7 +377,7 @@ def build_multiple_row_data_query(index, df_batch, start_date, end_date):
 def run():
     input_file_path = f'{ROOT_DIR}/eReport -TTN-clean_cate_1.xlsx'
     # input_file_path = f'/Users/tienbm/Downloads/danh sách báo cáo thời trang nữ (1).xlsx'
-    # input_file_path = f'/Users/tienbm/Downloads/eReport -TTN-clean_cate_1 (1).xlsx'
+    # input_file_path = f'/Users/tienbm/Downloads/output_file_part_2 (2).xlsx'
     df = load_query_dataframe(input_file_path, 'Sheet1')
     pd.options.mode.copy_on_write = True
 
