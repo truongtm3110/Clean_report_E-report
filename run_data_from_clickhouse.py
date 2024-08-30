@@ -115,6 +115,10 @@ def build_clickhouse_query(filer_report):
     else:
         where_query += f" OR (platform_id = 8)"
 
+    if where_query.startswith(" OR "):
+        where_query = where_query[4:]
+    where_query = f"({where_query})"
+
     is_split_keyword = filer_report.is_smart_queries
     if filer_report.lst_keyword:
         where_query += f" AND ("
@@ -405,6 +409,7 @@ def run():
 
         # print(query)
         # exit()
+        print('start query')
         aggs = client.query(query)
 
         result = aggs.result_rows[0]
