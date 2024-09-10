@@ -395,7 +395,7 @@ def run():
             lst_product = result_row[6]
             revenue_by_categories__id_1 = result_row[7]
 
-            top_10_product = [p.get('item') for p in lst_product[:1]]
+            top_10_product = [p.get('item') for p in lst_product[:10]]
             # middle_10_product = [p.get('item') for p in
             #                      lst_product[len(lst_product) // 2 - 5: len(lst_product) // 2 + 5]]
             # bottom_10_product = [p.get('item') for p in lst_product[-10:]]
