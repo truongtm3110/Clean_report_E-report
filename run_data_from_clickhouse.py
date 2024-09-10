@@ -88,7 +88,7 @@ def build_clickhouse_query(filer_report):
             lst_keyword_query_1 = [f"product_name ILIKE '{sub_keyword} %'" for sub_keyword in lst_sub_keyword]
             lst_keyword_query_2 = [f"product_name ILIKE '% {sub_keyword}'" for sub_keyword in lst_sub_keyword]
 
-            where_query += f" ({' AND '.join(lst_keyword_query)}) OR"
+            where_query += f" {' AND '.join(lst_keyword_query)} OR"
             where_query += f" ({' AND '.join(lst_keyword_query_1)}) OR "
             where_query += f"({' AND '.join(lst_keyword_query_2)})"
             where_query += f") OR"
@@ -105,12 +105,14 @@ def build_clickhouse_query(filer_report):
     if lst_keyword_required:
         where_query += f" AND ("
         for keyword in lst_keyword_required:
-            lst_keyword_query = [f"product_name ILIKE '% {sub_keyword} %'" for sub_keyword in [keyword]]
-            lst_keyword_query_1 = [f"product_name ILIKE '{sub_keyword} %'" for sub_keyword in [keyword]]
-            lst_keyword_query_2 = [f"product_name ILIKE '% {sub_keyword}'" for sub_keyword in [keyword]]
+            lst_keyword_query = [
+                f"product_name ILIKE '%{sub_keyword}%' OR product_name ILIKE '%{sub_keyword}' OR product_name ILIKE '{sub_keyword}%'"
+                for sub_keyword in [keyword]]
+            # lst_keyword_query_1 = [f"product_name ILIKE '{sub_keyword} %'" for sub_keyword in [keyword]]
+            # lst_keyword_query_2 = [f"product_name ILIKE '% {sub_keyword}'" for sub_keyword in [keyword]]
             where_query += f" ({' AND '.join(lst_keyword_query)}) AND"
-            where_query += f" ({' AND '.join(lst_keyword_query_1)}) AND"
-            where_query += f" ({' AND '.join(lst_keyword_query_2)}) AND"
+            # where_query += f" ({' AND '.join(lst_keyword_query_1)}) AND"
+            # where_query += f" ({' AND '.join(lst_keyword_query_2)}) AND"
         where_query = where_query.rstrip("AND")
         where_query += f")"
 
@@ -344,11 +346,11 @@ def build_multiple_row_data_query(index, df_batch, start_date, end_date):
 
 def run():
     # input_file_path = f'{ROOT_DIR}/Thời trang nữ - Copy.xlsx'
-    input_file_path = r"C:\Users\Admin\OneDrive\Desktop\Book1.xlsx"
+    input_file_path = r"C:\Users\Admin\Downloads\eReport_TTN_2.xlsx"
     df = load_query_dataframe(input_file_path, 'Sheet1')
     pd.options.mode.copy_on_write = True
 
-    batch_size = 30
+    batch_size = 20
 
     import clickhouse_connect
 
@@ -372,6 +374,7 @@ def run():
 
         # print(query)
         # exit()
+
         aggs = client.query(query)
 
         result = aggs.result_rows[0]
@@ -392,7 +395,7 @@ def run():
             lst_product = result_row[6]
             revenue_by_categories__id_1 = result_row[7]
 
-            top_10_product = [p.get('item') for p in lst_product[:100]]
+            top_10_product = [p.get('item') for p in lst_product[:1]]
             # middle_10_product = [p.get('item') for p in
             #                      lst_product[len(lst_product) // 2 - 5: len(lst_product) // 2 + 5]]
             # bottom_10_product = [p.get('item') for p in lst_product[-10:]]
