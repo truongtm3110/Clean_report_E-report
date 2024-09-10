@@ -171,6 +171,8 @@ def find_category_id_by_label_path(label_path: str, categories_tree: dict):
     """
     label_lst = [label.strip() for label in label_path.split('/')]
     for category in categories_tree:
+        if '/' in category['label']:
+            category['label'] = category['label'].replace('/', '|')
         if category['label'].strip().lower() == label_lst[0].lower():
             if len(label_lst) == 1:
                 return category['value']
