@@ -306,7 +306,7 @@ async def fetch_data_keyword(row):
         filter_report,
         '20230701',
         '20240630',
-        size_product=2_000
+        size_product=100
     )
 
     query_es_default = lst_query_es.get('query_es_default')
@@ -339,9 +339,9 @@ async def fetch_data_keyword(row):
     # by_shop = result_analytic_report.by_shop.lst_top_shop
 
     top_10_product = lst_product_revenue_30d_raw[:100]
-    middle_10_product = lst_product_revenue_30d_raw[
-                        len(lst_product_revenue_30d_raw) // 2 - 5: len(lst_product_revenue_30d_raw) // 2 + 5]
-    bottom_10_product = lst_product_revenue_30d_raw[-10:]
+    # middle_10_product = lst_product_revenue_30d_raw[
+    #                     len(lst_product_revenue_30d_raw) // 2 - 5: len(lst_product_revenue_30d_raw) // 2 + 5]
+    # bottom_10_product = lst_product_revenue_30d_raw[-10:]
 
     return {
         'by_marketplace': by_marketplace,
@@ -353,9 +353,9 @@ async def fetch_data_keyword(row):
         'lst_bee_category': lst_bee_category,
         # 'by_brand': by_brand,
         # 'by_shop': by_shop,
-        'top_10_product': top_10_product,
-        'middle_10_product': middle_10_product,
-        'bottom_10_product': bottom_10_product,
+        'top_10_product': top_10_product
+        # 'middle_10_product': middle_10_product,
+        # 'bottom_10_product': bottom_10_product,
     }
 
 
@@ -406,7 +406,8 @@ def get_categories_from_row(row: Series, platform: str = 'shopee'):
 
 
 async def run():
-    input_file_path = f'{ROOT_DIR}/top_volume_product.xlsx'
+    # input_file_path = f'{ROOT_DIR}/top_volume_product.xlsx'
+    input_file_path = r"C:\Users\Admin\Downloads\Thời Trang Nam (l2).xlsx"
 
     df = load_query_dataframe(input_file_path, 'Sheet1')
 

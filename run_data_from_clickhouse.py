@@ -2,7 +2,6 @@ import json
 import os
 import re
 from datetime import datetime
-
 import math
 import pandas as pd
 from pandas import Series
@@ -332,13 +331,12 @@ def build_multiple_row_data_query(index, df_batch, start_date, end_date):
 
 
 def run():
-    input_file_path = f'{ROOT_DIR}/eReport -TTN-clean_cate_1.xlsx'
-    # input_file_path = f'/Users/tienbm/Downloads/danh sách báo cáo thời trang nữ (1).xlsx'
-    # input_file_path = f'/Users/tienbm/Downloads/eReport -TTN-clean_cate_1 (1).xlsx'
+    # input_file_path = f'{ROOT_DIR}/Thời trang nữ - Copy.xlsx'
+    input_file_path = r"C:\Users\Admin\Downloads\Thời Trang Nam (l2).xlsx"
     df = load_query_dataframe(input_file_path, 'Sheet1')
     pd.options.mode.copy_on_write = True
 
-    batch_size = 50
+    batch_size = 30
 
     import clickhouse_connect
 
@@ -382,7 +380,7 @@ def run():
             lst_product = result_row[6]
             revenue_by_categories__id_1 = result_row[7]
 
-            top_10_product = [p.get('item') for p in lst_product[:30]]
+            top_10_product = [p.get('item') for p in lst_product[:100]]
             # middle_10_product = [p.get('item') for p in
             #                      lst_product[len(lst_product) // 2 - 5: len(lst_product) // 2 + 5]]
             # bottom_10_product = [p.get('item') for p in lst_product[-10:]]
@@ -466,7 +464,10 @@ def run():
                 category = map_category_obj.get(category_id)
                 if not category:
                     continue
-                ratio_revenue = round((revenue / tiki_revenue) * 100, 2)
+                try:
+                    ratio_revenue = round((revenue / tiki_revenue) * 100, 2)
+                except:
+                    ratio_revenue = 0
                 if ratio_revenue < 1:
                     continue
                 if category.get('label') == 'Chưa phân loại':
