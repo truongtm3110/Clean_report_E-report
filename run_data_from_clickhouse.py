@@ -345,8 +345,8 @@ def build_multiple_row_data_query(index, df_batch, start_date, end_date):
 
 
 def run():
-    # input_file_path = f'{ROOT_DIR}/Thời trang nữ - Copy.xlsx'
-    input_file_path = r"C:\Users\Admin\Downloads\eReport_TTN_2.xlsx"
+    input_file_path = f'{ROOT_DIR}/Thời trang nữ lần 2 (4).xlsx'
+    # input_file_path = r"C:\Users\Admin\DownloadseReport_TTN_5.xlsx"
     df = load_query_dataframe(input_file_path, 'Sheet1')
     pd.options.mode.copy_on_write = True
 
