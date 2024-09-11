@@ -6,18 +6,41 @@ def match_kw_in_name(name, lst):
     name = name.lower().strip()
     for kw in lst:
         kw = kw.lower().strip()
-        if kw in name.split(" "):
+        kw_split_num = len(kw.split())
+        words = name.lower().strip().split()
+        ngrams = []
+        for i in range(kw_split_num, 0, -1):
+            ngrams.extend([' '.join(ngram) for ngram in zip(*[words[j:] for j in range(i)])])
             return kw
     return None
 
 
 def match_kw_in_last_key_name(name, lst):
-    name = name.lower().strip()
+    name = name.lower().strip().split()
     for kw in lst:
         kw = kw.lower().strip()
-        if name.endswith(kw):
+        kw_split_num = len(kw.split())
+        name_check = " ".join(name[-kw_split_num:])
+        if kw in name_check:
             return kw
     return None
+
+# def match_kw_in_name(name, lst):
+#     name = name.lower().strip()
+#     for kw in lst:
+#         kw = kw.lower().strip()
+#         if kw in name.split(" "):
+#             return kw
+#     return None
+#
+#
+# def match_kw_in_last_key_name(name, lst):
+#     name = name.lower().strip()
+#     for kw in lst:
+#         kw = kw.lower().strip()
+#         if name.endswith(kw):
+#             return kw
+#     return None
 
 
 def cus_name(row):
