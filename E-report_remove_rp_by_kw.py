@@ -11,7 +11,9 @@ def match_kw_in_name(name, lst):
         ngrams = []
         for i in range(kw_split_num, 0, -1):
             ngrams.extend([' '.join(ngram) for ngram in zip(*[words[j:] for j in range(i)])])
-            return kw
+            for j in ngrams:
+                if kw == j:
+                    return kw
     return None
 
 
