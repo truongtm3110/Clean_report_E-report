@@ -456,7 +456,7 @@ async def run():
             sale = report_response.get('sale')
             product = report_response.get('product')
             shop = report_response.get('shop')
-            lst_bee_category = report_response.get('lst_bee_category')[:10]
+            # lst_bee_category = report_response.get('lst_bee_category')[:10]
             top_10_product = report_response.get('top_10_product')
             middle_10_product = report_response.get('middle_10_product')
             bottom_10_product = report_response.get('bottom_10_product')

@@ -232,7 +232,8 @@ def build_multiple_row_data_query(index, df_batch, start_date, end_date):
 
         lst_exclude_keyword = []
         if type(row['Từ khóa loại trừ']) is str:
-            lst_exclude_keyword = [keyword.strip() for keyword in row['Từ khóa loại trừ'].split(',')]
+            # lst_exclude_keyword = [keyword.strip() for keyword in row['Từ khóa loại trừ'].split(',')]
+            lst_exclude_keyword = [keyword for keyword in row['Từ khóa loại trừ'].split(',')]
 
         lst_keyword_required = []
         if type(row['Từ khóa cộng']) is str:
@@ -345,8 +346,8 @@ def build_multiple_row_data_query(index, df_batch, start_date, end_date):
 
 
 def run():
-    input_file_path = f'{ROOT_DIR}/Thời trang nữ lần 2 (4).xlsx'
-    # input_file_path = r"C:\Users\Admin\DownloadseReport_TTN_5.xlsx"
+    # input_file_path = f'{ROOT_DIR}/Thời trang nữ lần 2 (4).xlsx'
+    input_file_path = r"C:\Users\Admin\OneDrive\Desktop\Book1.xlsx"
     df = load_query_dataframe(input_file_path, 'Sheet1')
     pd.options.mode.copy_on_write = True
 
@@ -395,7 +396,7 @@ def run():
             lst_product = result_row[6]
             revenue_by_categories__id_1 = result_row[7]
 
-            top_10_product = [p.get('item') for p in lst_product[:10]]
+            top_10_product = [p.get('item') for p in lst_product[:50]]
             # middle_10_product = [p.get('item') for p in
             #                      lst_product[len(lst_product) // 2 - 5: len(lst_product) // 2 + 5]]
             # bottom_10_product = [p.get('item') for p in lst_product[-10:]]
@@ -500,7 +501,10 @@ def run():
                     continue
 
                 revenue = cate.get('count')
-                ratio_revenue = round((revenue / tiktok_revenue) * 100, 2)
+                try:
+                    ratio_revenue = round((revenue / tiktok_revenue) * 100, 2)
+                except:
+                    ratio_revenue = 0
                 tiktok_category_str += f"{category.get('label')} - {format_text_currency(revenue)} - {ratio_revenue}%\n"
             tiktok_category_str = tiktok_category_str[:-1]
 
