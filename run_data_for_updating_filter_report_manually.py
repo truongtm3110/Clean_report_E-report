@@ -407,7 +407,7 @@ def get_categories_from_row(row: Series, platform: str = 'shopee'):
 
 async def run():
     # input_file_path = f'{ROOT_DIR}/top_volume_product.xlsx'
-    input_file_path = r"C:\Users\Admin\OneDrive\Desktop\Book1.xlsx"
+    input_file_path = r"C:\Users\Admin\Downloads\eReport_2509 (3).xlsx"
 
     df = load_query_dataframe(input_file_path, 'Sheet1')
 
