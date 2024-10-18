@@ -6,7 +6,7 @@ logging.basicConfig(stream=sys.stdout, level=logging.INFO)
 
 
 class LoggerSimple:
-    def __init__(self, *args, **kwargs):
+    def __init__(self, *args: object, **kwargs: object) -> object:
         self.name = kwargs.get('name', 'default')
         dictConfig({
             'version': 1,
@@ -40,10 +40,13 @@ class LoggerSimple:
         })
         logging.getLogger("stomp.py").setLevel(logging.WARN)
         logging.getLogger("elasticsearch").setLevel(logging.WARN)
-        logging.getLogger("elastic_transport").setLevel(logging.WARN)
         logging.getLogger("pika").setLevel(logging.WARNING)
         logging.getLogger("celery.app.trace").setLevel(logging.WARNING)
         logging.getLogger("py4j").setLevel(logging.WARN)
-        logging.getLogger("pyppeteer.launcher").setLevel(logging.WARN)
+        logging.getLogger("kafka").setLevel(logging.ERROR)
+        logging.getLogger("aiokafka").setLevel(logging.WARN)
+        logging.getLogger('azure.core.pipeline.policies.http_logging_policy').setLevel(logging.WARNING)
+        logging.getLogger('aiormq.channel').setLevel(logging.WARNING)
+
         # logging.getLogger('sqlalchemy.engine').setLevel(logging.INFO)
-        self.logger = logging.getLogger(self.name)
+        self.logger = logging.getLogger(self.name.split(".")[-1])
